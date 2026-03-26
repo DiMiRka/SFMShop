@@ -5,3 +5,6 @@ class User:
 
     def get_info(self) -> str:
         return f"Пользователь: {self.name}, Email: {self.email}"
+
+    def __str__(self):
+        return self.name

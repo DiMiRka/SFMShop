@@ -26,7 +26,7 @@ if __name__ == "__main__":
     user_1 = User("Иван Иванов", "ivan@test.com")
     product_1 = Product("Ноутбук", 50000, 1)
     product_2 = Product("Мышь", 1500, 2)
-    order = Order(user_1, [product_1, product_2])
+    order = Order(1, user_1, [product_1, product_2])
 
     print(order.calculate_total())
     print(user_1.get_info())
@@ -37,3 +37,15 @@ if __name__ == "__main__":
     payments = [card_payment, paypal_payment]
     for payment in payments:
         print(payment.process_payment())
+
+    products = [
+        Product("Ноутбук", 50000, 10),
+        Product("Мышь", 1500, 20),
+        Product("Клавиатура", 3000, 15)
+    ]
+    products.sort()
+    for product in products:
+        print(product)
+
+    order_2 = Order(2, user_1, products)
+    print(order_2)
