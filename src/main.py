@@ -1,5 +1,6 @@
-from src.utils.order_processor import load_orders_from_file, process_orders, analyze_orders
 from loguru import logger
+from src.utils.order_processor import load_orders_from_file, process_orders, analyze_orders
+from src.models import Product, User, Order
 
 
 def process_order_file(input_file, output_file):
@@ -21,3 +22,12 @@ def process_order_file(input_file, output_file):
 
 if __name__ == "__main__":
     process_order_file("data/orders.txt", "data/processed_orders_report.txt")
+
+    user_1 = User("Иван Иванов", "ivan@test.com")
+    product_1 = Product("Ноутбук", 50000, 1)
+    product_2 = Product("Мышь", 1500, 2)
+    order = Order(user_1, [product_1, product_2])
+
+    print(order.calculate_total())
+    print(user_1.get_info())
+
