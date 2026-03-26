@@ -1,5 +1,8 @@
 from src.utils.order_processor import load_orders_from_file, process_orders, analyze_orders
 from src.models import Product, User, Order, CardPayment, PayPalPayment
+from src.models.exceptions import *
+
+from loguru import logger
 
 
 def process_order_file(input_file, output_file):
@@ -56,6 +59,38 @@ if __name__ == "__main__":
     print("------------------------------")
 
     print("ООП Урок 4 ОСНОВЫ ИСКЛЮЧЕНИЙ")
-    product_fail = Product("Монитор", -500, 1)
-    user_fail = User("Dima", "dimirkabk.ru")
+    try:
+        product_fail = Product("Монитор", -500, 1)
+    except NegativePriceError as e:
+        print(e)
+    try:
+        user_fail = User("Dima", "dimirkabk.ru")
+    except ValueError as e:
+        print(e)
+    print("------------------------------")
+
+    print("ООП Урок 5 СОЗДАНИЕ СОБСТВЕННЫХ ИСКЛЮЧЕНИЙ")
+    try:
+        product = Product("Клавиатура", -2000, 1)
+    except NegativePriceError as e:
+        logger.error(f"Ошибка валидации: {e}")
+    except ValidationError as e:
+        logger.error(f"Общая ошибка валидации: {e}")
+
+    try:
+        product = Product("Наушники", 500, 7)
+        product.sell(10)
+    except InsufficientStockError as e:
+        logger.error(f"Ошибка бизнес-логики: {e}")
+    except BusinessLogicError as e:
+        logger.error(f"Общая ошибка бизнес-логики: {e}")
+
+    try:
+        user = User("Dima", "dimirka@bk.ru")
+        order = Order(1, user, [])
+    except InvalidOrderError as e:
+        logger.error(f"Ошибка бизнес-логики: {e}")
+    except BusinessLogicError as e:
+        logger.error(f"Общая ошибка бизнес-логики: {e}")
+
     print("------------------------------")
