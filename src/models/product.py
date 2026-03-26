@@ -4,6 +4,15 @@ class Product:
         self.price = price
         self.quantity = quantity
 
+        try:
+            if price < 0:
+                self.price = 0
+                raise ValueError('Цена не может быть отрицательной')
+            else:
+                self.price = price
+        except ValueError as e:
+            print(e)
+
     def get_total_price(self) -> float:
         return self.price * self.quantity
 

@@ -12,7 +12,6 @@ def load_orders_from_file(filename: str = "src/data/orders.txt") -> list | None:
                     result.append(line)
                 except ValueError:
                     logger.error(f"Ошибка в строке {line}\nВторым аргументом должно быть число")
-        logger.info(result)
         return result
     except FileNotFoundError:
         logger.error(f"Файл {filename} не найден")
@@ -42,7 +41,6 @@ def process_orders(orders_data: list) -> list[dict]:
                        "total": total,
                        "status": order[2],
                        "user": order[3]})
-    logger.info(result)
     return result
 
 
@@ -64,5 +62,4 @@ def analyze_orders(processed_orders):
         stats["unique_users"].add(order["user"])
 
     stats["unique_users"] = list(stats["unique_users"])
-    logger.info(stats)
     return stats

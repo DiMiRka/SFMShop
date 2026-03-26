@@ -1,4 +1,3 @@
-from loguru import logger
 from src.utils.order_processor import load_orders_from_file, process_orders, analyze_orders
 from src.models import Product, User, Order, CardPayment, PayPalPayment
 
@@ -14,7 +13,6 @@ def process_order_file(input_file, output_file):
 По статусам: {stats_str}
 Уникальных пользователя: {len(analyze["unique_users"])}
 """
-    logger.info(result)
 
     with open(output_file, "w", encoding="utf-8") as file:
         file.write(result)
@@ -28,16 +26,22 @@ if __name__ == "__main__":
     product_2 = Product("Мышь", 1500, 2)
     order = Order(1, user_1, [product_1, product_2])
 
+    print("------------------------------")
+    print("ООП Урок 1 КЛАССЫ")
     print(order.calculate_total())
     print(user_1.get_info())
+    print("------------------------------")
 
+    print("ООП Урок 2 ПРИНЦИПЫ ООП")
     card_payment = CardPayment(3000, "1234 5678 9012 3456")
     paypal_payment = PayPalPayment(2500, "user@paypal.com")
 
     payments = [card_payment, paypal_payment]
     for payment in payments:
         print(payment.process_payment())
+    print("------------------------------")
 
+    print("ООП Урок 3 МАГИЧЕСКИЕ МЕТОДЫ")
     products = [
         Product("Ноутбук", 50000, 10),
         Product("Мышь", 1500, 20),
@@ -49,3 +53,9 @@ if __name__ == "__main__":
 
     order_2 = Order(2, user_1, products)
     print(order_2)
+    print("------------------------------")
+
+    print("ООП Урок 4 ОСНОВЫ ИСКЛЮЧЕНИЙ")
+    product_fail = Product("Монитор", -500, 1)
+    user_fail = User("Dima", "dimirkabk.ru")
+    print("------------------------------")
