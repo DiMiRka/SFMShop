@@ -10,10 +10,6 @@ class BusinessLogicError(SFMShopException):
     pass
 
 
-class DatabaseError(SFMShopException):
-    pass
-
-
 class NegativePriceError(ValidationError):
     pass
 

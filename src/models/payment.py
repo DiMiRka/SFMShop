@@ -11,7 +11,7 @@ class Payment(ABC):
 
 
 class CardPayment(Payment):
-    def __init__(self, amount, card_number):
+    def __init__(self, amount: int, card_number: str):
         super().__init__(amount)
         self.__card_number = card_number
 
@@ -20,7 +20,7 @@ class CardPayment(Payment):
 
 
 class PayPalPayment(Payment):
-    def __init__(self, amount, email):
+    def __init__(self, amount: int, email: str):
         super().__init__(amount)
         self.email = email
 

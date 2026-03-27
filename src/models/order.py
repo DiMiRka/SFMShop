@@ -11,6 +11,9 @@ class Order:
             raise InvalidOrderError("Заказ невалиден: пустой список товаров")
         self.products = products
 
+    def __str__(self):
+        return f"Заказ #{self.order_id} на сумму {self.calculate_total()} руб. (Пользователь: {self.user})"
+
     def calculate_total(self) -> float:
         total = 0
         for product in self.products:
@@ -18,5 +21,8 @@ class Order:
 
         return total
 
-    def __str__(self):
-        return f"Заказ #{self.order_id} на сумму {self.calculate_total()} руб. (Пользователь: {self.user})"
+    def add_product(self, product: Product):
+        if not isinstance(product, Product):
+            raise InvalidOrderError("Такого продукта нет")
+        else:
+            self.products.append(product)

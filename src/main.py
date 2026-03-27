@@ -94,3 +94,35 @@ if __name__ == "__main__":
         logger.error(f"Общая ошибка бизнес-логики: {e}")
 
     print("------------------------------")
+
+    print("ООП ПРАКТИЧЕСКОЕ ЗАДАНИЕ")
+
+    def process_order_system():
+        user_new = User("Дима", "dimirka@bk.ru")
+
+        product1 = Product("Ноутбук", 50000, 2)
+        product2 = Product("Мышь", 1500, 3)
+
+        order_new = Order(5, user_new, [product1, product2])
+
+        total = order_new.calculate_total()
+        print("Общая стоимость заказа:", total)
+
+        payments_new = [
+            CardPayment(1000, "1234 5678 9012 3456"),
+            PayPalPayment(2000, "test@paypal.com")
+        ]
+
+        for pay in payments_new:
+            print(pay.process_payment())
+
+        sorted_products = sorted([product1, product2])
+        for prod in sorted_products:
+            print(prod)
+
+        try:
+            product.set_price(-1000)
+        except ValidationError as ex:
+            print("Ошибка валидации:", ex)
+
+    process_order_system()
