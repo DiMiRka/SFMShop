@@ -14,6 +14,12 @@ def connect_to_db():
         return None
 
 
+def get_product_db(conn, product_id: int):
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
+        return cursor.fetchone()
+
+
 def add_product(conn, name, price, quantity):
     try:
         with conn.cursor() as cursor:
@@ -25,15 +31,18 @@ def add_product(conn, name, price, quantity):
         print(f"Ошибка при добавлении товара: {e}")
 
 
-def get_all_products(conn):
+def get_all_products(conn, limit: int, offset: int):
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM products")
+            cursor.execute("SELECT * FROM products LIMIT %s OFFSET %s",
+                           (limit, offset))
             products = cursor.fetchall()
         print("Все товары:")
         for product in products:
             print(product)
         print("------------")
+
+        return products
     except psycopg2.Error as e:
         print(f"Ошибка при получении товаров: {e}")
 
@@ -97,12 +106,32 @@ def delete_order(conn, order_id):
         return 0
 
 
-def create_order(conn, user_id, total):
+def create_order(conn, user_id, product_id, quantity):
     try:
         with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO orders (user_id, total) VALUES (%s, %s)", (user_id, total))
-            print(f"Заказ добавлен")
+            cursor.execute("SELECT price FROM products WHERE id = %s", (product_id,))
+            product = cursor.fetchone()
+            total = product[0] * quantity
+
+            cursor.execute(
+                "INSERT INTO orders (user_id, total) VALUES (%s, %s) RETURNING id",
+                (user_id, total)
+            )
+            order_id = cursor.fetchone()[0]
+
+            cursor.execute(
+                "INSERT INTO order_items (order_id, product_id, quantity) VALUES (%s, %s, %s)",
+                (order_id, product_id, quantity)
+            )
         conn.commit()
+        return {
+            "order_id": order_id,
+            "user_id": user_id,
+            "product_id": product_id,
+            "quantity": quantity,
+            "total": float(total)
+        }
+
     except psycopg2.Error as e:
         conn.rollback()
         print(f"Ошибка при создании заказа: {e}")
