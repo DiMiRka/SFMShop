@@ -4,6 +4,7 @@ from src.utils.order_processor import load_orders_from_file, process_orders, ana
 from src.models import Product, User, Order, CardPayment, PayPalPayment
 from src.models.exceptions import *
 from src.database.connection import *
+from src.database.queries import *
 
 from loguru import logger
 
@@ -36,3 +37,13 @@ if __name__ == "__main__":
         get_user_by_id(conn, 1)
         create_order(conn, 1, 5)
         get_user_orders(conn, 1)
+
+        print("----------------------------------")
+        print("СУБД Практическое задание")
+
+        create_user(conn, "Alex","alex@bk.ru")
+        get_all_products(conn)
+        get_order_statistics(conn)
+        get_top_products(conn)
+        get_user_by_id(conn, 1)
+        get_user_order_history(conn, 1)

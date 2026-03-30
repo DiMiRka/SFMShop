@@ -33,6 +33,7 @@ def get_all_products(conn):
         print("Все товары:")
         for product in products:
             print(product)
+        print("------------")
     except psycopg2.Error as e:
         print(f"Ошибка при получении товаров: {e}")
 
@@ -54,6 +55,7 @@ def create_user(conn, name, email):
         with conn.cursor() as cursor:
             cursor.execute("INSERT INTO users (name, email) VALUES (%s, %s)", (name, email))
         print(f"Пользователь добавлен: {name}, {email}")
+        print("------------")
         conn.commit()
     except psycopg2.Error as e:
         conn.rollback()
@@ -73,6 +75,26 @@ def get_user_by_id(conn, user_id):
     except psycopg2.Error as e:
         print(f"Ошибка при получении пользователя: {e}")
         return None
+
+
+def delete_order(conn, order_id):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM orders WHERE id = %s",
+                (order_id,)
+            )
+            deleted_rows = cursor.rowcount
+
+        conn.commit()
+
+        print(f"Удалено заказов: {deleted_rows}")
+        return deleted_rows
+
+    except psycopg2.Error as e:
+        conn.rollback()
+        print(f"Ошибка при удалении заказа: {e}")
+        return 0
 
 
 def create_order(conn, user_id, total):
