@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from src.utils.order_processor import load_orders_from_file, process_orders, analyze_orders
 from src.models import Product, User, Order, CardPayment, PayPalPayment
 from src.models.exceptions import *
+from src.database.connection import *
 
 from loguru import logger
 
@@ -22,107 +25,14 @@ def process_order_file(input_file, output_file):
 
 
 if __name__ == "__main__":
-    process_order_file("data/orders.txt", "data/processed_orders_report.txt")
+    print("СУБД урок 3")
+    with connect_to_db() as conn:
+        add_product(conn, "Телевизор", 55000, 1)
+        print(get_all_products(conn))
+        update_product_price(conn, 1, 4000)
+        print("----------------------------------")
 
-    user_1 = User("Иван Иванов", "ivan@test.com")
-    product_1 = Product("Ноутбук", 50000, 1)
-    product_2 = Product("Мышь", 1500, 2)
-    order = Order(1, user_1, [product_1, product_2])
-
-    print("------------------------------")
-    print("ООП Урок 1 КЛАССЫ")
-    print(order.calculate_total())
-    print(user_1.get_info())
-    print("------------------------------")
-
-    print("ООП Урок 2 ПРИНЦИПЫ ООП")
-    card_payment = CardPayment(3000, "1234 5678 9012 3456")
-    paypal_payment = PayPalPayment(2500, "user@paypal.com")
-
-    payments = [card_payment, paypal_payment]
-    for payment in payments:
-        print(payment.process_payment())
-    print("------------------------------")
-
-    print("ООП Урок 3 МАГИЧЕСКИЕ МЕТОДЫ")
-    products = [
-        Product("Ноутбук", 50000, 10),
-        Product("Мышь", 1500, 20),
-        Product("Клавиатура", 3000, 15)
-    ]
-    products.sort()
-    for product in products:
-        print(product)
-
-    order_2 = Order(2, user_1, products)
-    print(order_2)
-    print("------------------------------")
-
-    print("ООП Урок 4 ОСНОВЫ ИСКЛЮЧЕНИЙ")
-    try:
-        product_fail = Product("Монитор", -500, 1)
-    except NegativePriceError as e:
-        print(e)
-    try:
-        user_fail = User("Dima", "dimirkabk.ru")
-    except ValueError as e:
-        print(e)
-    print("------------------------------")
-
-    print("ООП Урок 5 СОЗДАНИЕ СОБСТВЕННЫХ ИСКЛЮЧЕНИЙ")
-    try:
-        product = Product("Клавиатура", -2000, 1)
-    except NegativePriceError as e:
-        logger.error(f"Ошибка валидации: {e}")
-    except ValidationError as e:
-        logger.error(f"Общая ошибка валидации: {e}")
-
-    try:
-        product = Product("Наушники", 500, 7)
-        product.sell(10)
-    except InsufficientStockError as e:
-        logger.error(f"Ошибка бизнес-логики: {e}")
-    except BusinessLogicError as e:
-        logger.error(f"Общая ошибка бизнес-логики: {e}")
-
-    try:
-        user = User("Dima", "dimirka@bk.ru")
-        order = Order(1, user, [])
-    except InvalidOrderError as e:
-        logger.error(f"Ошибка бизнес-логики: {e}")
-    except BusinessLogicError as e:
-        logger.error(f"Общая ошибка бизнес-логики: {e}")
-
-    print("------------------------------")
-
-    print("ООП ПРАКТИЧЕСКОЕ ЗАДАНИЕ")
-
-    def process_order_system():
-        user_new = User("Дима", "dimirka@bk.ru")
-
-        product1 = Product("Ноутбук", 50000, 2)
-        product2 = Product("Мышь", 1500, 3)
-
-        order_new = Order(5, user_new, [product1, product2])
-
-        total = order_new.calculate_total()
-        print("Общая стоимость заказа:", total)
-
-        payments_new = [
-            CardPayment(1000, "1234 5678 9012 3456"),
-            PayPalPayment(2000, "test@paypal.com")
-        ]
-
-        for pay in payments_new:
-            print(pay.process_payment())
-
-        sorted_products = sorted([product1, product2])
-        for prod in sorted_products:
-            print(prod)
-
-        try:
-            product.set_price(-1000)
-        except ValidationError as ex:
-            print("Ошибка валидации:", ex)
-
-    process_order_system()
+        create_user(conn, "Dima", "dimirka@bk.ru")
+        get_user_by_id(conn, 1)
+        create_order(conn, 1, 5)
+        get_user_orders(conn, 1)
