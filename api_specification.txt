@@ -1,0 +1,180 @@
+API спецификация для проекта SFMShop
+
+1. GET /products
+Описание:
+Получить список всех товаров
+
+Параметры:
+- Query: нет
+
+Ответ:
+200 OK
+[
+  {"id": 1, "name": "Laptop", "price": 1200, "quantity": 10},
+  {"id": 2, "name": "Phone", "price": 800, "quantity": 20}
+]
+
+Ошибки:
+500 Internal Server Error
+--------------------------------------------------
+2. GET /products/{id}
+Описание:
+Получить товар по ID
+
+Параметры:
+- Path: id (int)
+
+Ответ:
+200 OK
+{"id": 1, "name": "Laptop", "price": 1200, "quantity": 10}
+
+Ошибки:
+404 Not Found
+{"detail": "Product not found"}
+
+500 Internal Server Error
+--------------------------------------------------
+3. POST /products
+Описание:
+Создать новый товар
+
+Тело запроса:
+{
+  "name": "Tablet",
+  "price": 500,
+  "quantity": 15
+}
+
+Ответ:
+201 Created
+{
+  "id": 10,
+  "name": "Tablet",
+  "price": 500,
+  "quantity": 15
+}
+
+Ошибки:
+400 Bad Request
+{"detail": "Invalid data"}
+
+500 Internal Server Error
+--------------------------------------------------
+4. PUT /products/{id}
+Описание:
+Обновить товар
+
+Параметры:
+- Path: id (int)
+
+Тело запроса:
+{
+  "name": "Tablet Pro",
+  "price": 700,
+  "quantity": 10
+}
+
+Ответ:
+200 OK
+{"message": "Product updated successfully"}
+
+Ошибки:
+400 Bad Request
+404 Not Found
+{"detail": "Product not found"}
+
+500 Internal Server Error
+--------------------------------------------------
+5. DELETE /products/{id}
+Описание:
+Удалить товар
+
+Параметры:
+- Path: id (int)
+
+Ответ:
+204 No Content
+
+Ошибки:
+404 Not Found
+{"detail": "Product not found"}
+
+500 Internal Server Error
+--------------------------------------------------
+6. GET /orders
+Описание:
+Получить список всех заказов
+
+Параметры:
+- Query (опционально): user_id
+
+Ответ:
+200 OK
+[
+  {"id": 1, "user_id": 1, "total": 1350, "created_at": "2026-01-01"},
+  {"id": 2, "user_id": 2, "total": 950, "created_at": "2026-01-02"}
+]
+
+Ошибки:
+500 Internal Server Error
+--------------------------------------------------
+7. POST /orders
+Описание:
+Создать заказ
+
+Тело запроса:
+{
+  "user_id": 1,
+  "items": [
+    {"product_id": 1, "quantity": 1},
+    {"product_id": 2, "quantity": 2}
+  ]
+}
+
+Ответ:
+201 Created
+{
+  "order_id": 10,
+  "total": 2600,
+  "message": "Order created successfully"
+}
+
+Ошибки:
+400 Bad Request
+{"detail": "Invalid data"}
+
+404 Not Found
+{"detail": "User or product not found"}
+
+500 Internal Server Error
+--------------------------------------------------
+8. GET /users/{id}/orders
+Описание:
+Получить заказы пользователя
+
+Параметры:
+- Path: id (int)
+
+Ответ:
+200 OK
+[
+  {"order_id": 1, "total": 1350, "created_at": "2026-01-01"},
+  {"order_id": 2, "total": 950, "created_at": "2026-01-02"}
+]
+
+Ошибки:
+404 Not Found
+{"detail": "User not found"}
+
+500 Internal Server Error
+--------------------------------------------------
+Обработка ошибок
+
+400 Bad Request
+Неверные входные данные
+
+404 Not Found
+Ресурс не найден
+
+500 Internal Server Error
+Ошибка на стороне сервера
