@@ -1,14 +1,20 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
 from src.models.exceptions import NegativePriceError, InsufficientStockError, NegativeQuantityError
+from src.models.mixins import LoggableMixin, ValidatableMixin, SerializableMixin
 
 
 @dataclass
-class Product:
+class Product(LoggableMixin, ValidatableMixin, SerializableMixin):
     name: str
     _price: float
     _quantity: int = 0
 
     def __post_init__(self):
+        self.validate()
+        self.log(f"Создан: {self.name}")
+
+    def validate(self):
         if self._price < 0:
             raise NegativePriceError('Цена не может быть отрицательной')
         if self._quantity < 0:
@@ -72,8 +78,3 @@ class Product:
     def get_total_price(self) -> float:
         return self.price * self.quantity
 
-    def set_price(self, price: float):
-        if price > 0:
-            self.price = price
-        else:
-            raise NegativePriceError('Цена не может быть отрицательной')
