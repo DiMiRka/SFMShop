@@ -1,15 +1,42 @@
-from src.models.exceptions import NegativePriceError, InsufficientStockError
+from dataclasses import dataclass, field
+from src.models.exceptions import NegativePriceError, InsufficientStockError, NegativeQuantityError
 
 
+@dataclass
 class Product:
-    def __init__(self, name, price, quantity):
-        self.name = name
+    name: str
+    _price: float
+    _quantity: int = 0
+
+    def __post_init__(self):
+        if self._price < 0:
+            raise NegativePriceError('Цена не может быть отрицательной')
+        if self._quantity < 0:
+            raise NegativeQuantityError('Количество не может быть отрицательным')
+
+    @property
+    def price(self):
+        return self._price
+
+    @price.setter
+    def price(self, price):
         if price < 0:
-            self.price = 0
+            self._price = 0
             raise NegativePriceError('Цена не может быть отрицательной')
         else:
-            self.price = price
-        self.quantity = quantity
+            self._price = price
+
+    @property
+    def quantity(self):
+        return self._quantity
+
+    @quantity.setter
+    def quantity(self, quantity):
+        if quantity < 0:
+            self._quantity = 0
+            raise NegativeQuantityError('Количество не может быть отрицательным')
+        else:
+            self._quantity = quantity
 
     def __str__(self):
         return f"Товар: {self.name}, Цена: {self.price} руб., Количество: {self.quantity}"
@@ -28,6 +55,14 @@ class Product:
             return self.name == other.name and self.price == other.price
         else:
             return NotImplemented
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)
+
+    @staticmethod
+    def calculate_discount(price, discount):
+        return price * (1 + discount)
 
     def sell(self, amount: int):
         if self.quantity < amount:
