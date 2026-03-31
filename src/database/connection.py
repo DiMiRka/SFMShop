@@ -1,4 +1,8 @@
 import psycopg2
+from fastapi import HTTPException
+
+from src.models import Product, Order, User
+from src.schemas import ProductCreate
 
 
 def connect_to_db():
@@ -15,39 +19,91 @@ def connect_to_db():
 
 
 def get_product_db(conn, product_id: int):
-    with conn.cursor() as cursor:
-        cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
-        return cursor.fetchone()
-
-
-def add_product(conn, name, price, quantity):
     try:
         with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO products (name, price, quantity) VALUES (%s, %s, %s)", (name, price, quantity))
-            print(f"Товар добавлен: {name}, {price}, {quantity}")
+            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
+            product = cursor.fetchone()
+            if product is None:
+                return None
+            return product
+    except psycopg2.Error as e:
+        print(f"Ошибка при получении товара: {e}")
+
+
+def add_product_db(conn, product: ProductCreate):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("INSERT INTO products (name, price, quantity)"
+                           "VALUES (%s, %s, %s)"
+                           "RETURNING id",
+                           (product.name, product.price, product.quantity))
+            print(f"Товар добавлен: {product.name}, {product.price}, {product.quantity}")
+            product_id = cursor.fetchone()[0]
             conn.commit()
+            return {"id": product_id, "message": "Товар добавлен"}
     except psycopg2.Error as e:
         conn.rollback()
         print(f"Ошибка при добавлении товара: {e}")
 
 
-def get_all_products(conn, limit: int, offset: int):
+def get_all_products_db(conn, limit: int, offset: int):
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM products LIMIT %s OFFSET %s",
-                           (limit, offset))
-            products = cursor.fetchall()
-        print("Все товары:")
-        for product in products:
-            print(product)
-        print("------------")
+            cursor.execute("SELECT * FROM products")
+            all_products = cursor.fetchall()
 
-        return products
+            products = []
+            for data in all_products:
+                product = Product(name=data[1], price=data[2], quantity=data[3])
+                product.id = data[0]
+                products.append(product.__dict__)
+
+            total = len(all_products)
+            paginated_products = products[offset:offset+limit]
+
+        return {
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "products": paginated_products
+        }
     except psycopg2.Error as e:
         print(f"Ошибка при получении товаров: {e}")
 
 
-def update_product_price(conn, product_id, new_price):
+def update_product_db(conn, product_id, product: ProductCreate):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
+            product_db = cursor.fetchone()
+            if product_db is None:
+                return None
+
+            cursor.execute("UPDATE products "
+                           "SET name = %s, price = %s, quantity = %s "
+                           "WHERE id = %s",
+                           (product.name, product.price, product.quantity, product_id))
+
+            return {"id": product_id, "message": "Товар обновлен"}
+    except psycopg2.Error as e:
+        print(f"Ошибка при обновлении товара: {e}")
+
+
+def delete_product_db(conn, product_id):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
+            product = cursor.fetchone()
+            if product is None:
+                return None
+
+            cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
+            return product
+    except psycopg2.Error as e:
+        print(f"Ошибка при удалении товара: {e}")
+
+
+def update_product_price_db(conn, product_id, new_price):
     try:
         with conn.cursor() as cursor:
             cursor.execute("UPDATE products SET price = %s WHERE id = %s",
@@ -59,7 +115,7 @@ def update_product_price(conn, product_id, new_price):
         print(f"Ошибка при обновлении цены: {e}")
 
 
-def create_user(conn, name, email):
+def create_user_db(conn, name, email):
     try:
         with conn.cursor() as cursor:
             cursor.execute("INSERT INTO users (name, email) VALUES (%s, %s)", (name, email))
@@ -71,7 +127,7 @@ def create_user(conn, name, email):
         print(f"Ошибка при создании пользователя: {e}")
 
 
-def get_user_by_id(conn, user_id):
+def get_user_by_id_db(conn, user_id):
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
@@ -86,7 +142,56 @@ def get_user_by_id(conn, user_id):
         return None
 
 
-def delete_order(conn, order_id):
+def create_order_db(conn, user_id, product_id, quantity):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
+            product_db = cursor.fetchone()
+            if product_db is None:
+                raise HTTPException(status_code=404, detail="Товар не найден")
+            product = Product(name=product_db[1], price=product_db[2], quantity=quantity)
+
+            cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+            user_db = cursor.fetchone()
+            if user_db is None:
+                raise HTTPException(status_code=404, detail="Пользователь не найден")
+            user = User(name=user_db[1], email=user_db[2])
+            user.id = user_db[0]
+
+            order = Order(order_id=1, user=user, products=[product])
+
+            total = order.calculate_total()
+
+            cursor.execute(
+                "INSERT INTO orders (user_id, total) VALUES (%s, %s) RETURNING id",
+                (user_id, total)
+            )
+            order_id = cursor.fetchone()[0]
+            order.id = order_id
+
+            cursor.execute(
+                "INSERT INTO order_items (order_id, product_id, quantity) VALUES (%s, %s, %s)",
+                (order_id, product_id, quantity)
+            )
+        conn.commit()
+        return {
+            "order_id": order_id,
+            "user_id": user_id,
+            "product_id": product_id,
+            "quantity": quantity,
+            "total": float(total)
+        }
+
+    except psycopg2.Error as e:
+        conn.rollback()
+        print(f"Ошибка при создании заказа: {e}")
+    except Exception as e:
+        conn.rollback()
+        print(f"Ошибка при создании заказа: {e}")
+
+
+
+def delete_order_db(conn, order_id):
     try:
         with conn.cursor() as cursor:
             cursor.execute(
@@ -106,38 +211,7 @@ def delete_order(conn, order_id):
         return 0
 
 
-def create_order(conn, user_id, product_id, quantity):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT price FROM products WHERE id = %s", (product_id,))
-            product = cursor.fetchone()
-            total = product[0] * quantity
-
-            cursor.execute(
-                "INSERT INTO orders (user_id, total) VALUES (%s, %s) RETURNING id",
-                (user_id, total)
-            )
-            order_id = cursor.fetchone()[0]
-
-            cursor.execute(
-                "INSERT INTO order_items (order_id, product_id, quantity) VALUES (%s, %s, %s)",
-                (order_id, product_id, quantity)
-            )
-        conn.commit()
-        return {
-            "order_id": order_id,
-            "user_id": user_id,
-            "product_id": product_id,
-            "quantity": quantity,
-            "total": float(total)
-        }
-
-    except psycopg2.Error as e:
-        conn.rollback()
-        print(f"Ошибка при создании заказа: {e}")
-
-
-def get_user_orders(conn, user_id):
+def get_user_orders_db(conn, user_id):
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM orders WHERE user_id = %s", (user_id,))
@@ -147,4 +221,3 @@ def get_user_orders(conn, user_id):
             print(order)
     except psycopg2.Error as e:
         print(f"Ошибка при получении заказов: {e}")
-
