@@ -15,11 +15,7 @@ class Order:
         return f"Заказ #{self.order_id} на сумму {self.calculate_total()} руб. (Пользователь: {self.user})"
 
     def calculate_total(self) -> float:
-        total = 0
-        for product in self.products:
-            total += product.get_total_price()
-
-        return total
+        return sum([product.get_total_price for product in self.products])
 
     def add_product(self, product: Product):
         if not isinstance(product, Product):
