@@ -4,13 +4,12 @@ from src.models.exceptions import NegativePriceError, InsufficientStockError
 class Product:
     def __init__(self, name, price, quantity):
         self.name = name
-        self.price = price
-        self.quantity = quantity
         if price < 0:
             self.price = 0
             raise NegativePriceError('Цена не может быть отрицательной')
         else:
             self.price = price
+        self.quantity = quantity
 
     def __str__(self):
         return f"Товар: {self.name}, Цена: {self.price} руб., Количество: {self.quantity}"
