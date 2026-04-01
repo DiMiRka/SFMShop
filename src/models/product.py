@@ -1,24 +1,41 @@
 from dataclasses import dataclass
+from abc import ABC, abstractmethod
 
 from src.models.exceptions import NegativePriceError, InsufficientStockError, NegativeQuantityError
-from src.models.mixins import LoggableMixin, ValidatableMixin, SerializableMixin
+from src.models.mixins import LoggableMixin, SerializableMixin
+
+
+class DiscountStrategy(ABC):
+    @abstractmethod
+    def apply(self, price: float):
+        pass
+
+
+class PercentDiscount(DiscountStrategy):
+    def __init__(self, percent: float):
+        self.percent = percent
+
+    def apply(self, price: float):
+        return price * (1 - self.percent / 100)
+
+
+class FixedDiscount(DiscountStrategy):
+    def __init__(self, amount: float):
+        self.amount = amount
+
+    def apply(self, price: float):
+        return price - self.amount
 
 
 @dataclass
-class Product(LoggableMixin, ValidatableMixin, SerializableMixin):
+class Product(LoggableMixin, SerializableMixin):
     name: str
     _price: float
     _quantity: int = 0
 
     def __post_init__(self):
-        self.validate()
+        ProductValidator.validate(self)
         self.log(f"Создан: {self.name}")
-
-    def validate(self):
-        if self._price < 0:
-            raise NegativePriceError('Цена не может быть отрицательной')
-        if self._quantity < 0:
-            raise NegativeQuantityError('Количество не может быть отрицательным')
 
     @property
     def price(self):
@@ -66,15 +83,22 @@ class Product(LoggableMixin, ValidatableMixin, SerializableMixin):
     def from_dict(cls, d):
         return cls(**d)
 
-    @staticmethod
-    def calculate_discount(price, discount):
-        return price * (1 + discount)
-
     def sell(self, amount: int):
         if self.quantity < amount:
             raise InsufficientStockError(f"Товара недостаточно. На складе: {self.quantity}, требуется: {amount}")
         self.quantity = self.quantity - amount
 
-    def get_total_price(self) -> float:
-        return self.price * self.quantity
 
+class ProductCalculator:
+    @staticmethod
+    def calculate_price(product: Product, discount: DiscountStrategy):
+        return discount.apply(product.price)
+
+
+class ProductValidator:
+    @staticmethod
+    def validate(product: Product):
+        if product.price < 0:
+            raise NegativePriceError('Цена не может быть отрицательной')
+        if product.quantity < 0:
+            raise NegativeQuantityError('Количество не может быть отрицательным')

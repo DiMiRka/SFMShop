@@ -1,7 +1,7 @@
 import psycopg2
 from fastapi import HTTPException
 
-from src.models import Product, Order, User
+from src.models import Product, Order, OrderCalculator, User
 from src.schemas import ProductCreate
 
 
@@ -160,7 +160,7 @@ def create_order_db(conn, user_id, product_id, quantity):
 
             order = Order(order_id=1, user=user, products=[product])
 
-            total = order.calculate_total()
+            total = OrderCalculator.calculate_total(order)
 
             cursor.execute(
                 "INSERT INTO orders (user_id, total) VALUES (%s, %s) RETURNING id",
