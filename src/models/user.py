@@ -1,4 +1,8 @@
-class User:
+from src.models.metaclasses import ModelMeta
+from src.models.mixins import SerializableMixin
+
+
+class User(metaclass=ModelMeta, SerializableMixin):
     def __init__(self, name: str, email: str):
         self.name = name
         self._email = email

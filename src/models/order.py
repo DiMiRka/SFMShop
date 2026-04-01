@@ -1,12 +1,13 @@
 from datetime import datetime
 
-from src.models.product import Product
+from src.models.product import Product, ProductCalculator
 from src.models.user import User
 from src.models.exceptions import InvalidOrderError
-from src.models.mixins import LoggableMixin, ValidatableMixin, SerializableMixin
+from src.models.mixins import LoggableMixin, SerializableMixin
+from src.models.metaclasses import ModelMeta
 
 
-class Order(LoggableMixin, SerializableMixin):
+class Order(metaclass=ModelMeta, LoggableMixin, SerializableMixin):
     def __init__(self, order_id: int, user: User, products: list[Product]):
         OrderValidator.validate(self)
         self.order_id = order_id
@@ -34,7 +35,7 @@ class Order(LoggableMixin, SerializableMixin):
 class OrderCalculator:
     @staticmethod
     def calculate_total(order: Order) -> float:
-        return sum([product.get_total_price for product in order.products])
+        return sum([ProductCalculator.calculate_total(product) for product in order.products])
 
 
 class OrderValidator:

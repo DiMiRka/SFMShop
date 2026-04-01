@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 from src.models.exceptions import NegativePriceError, InsufficientStockError, NegativeQuantityError
 from src.models.mixins import LoggableMixin, SerializableMixin
+from src.models.metaclasses import ModelMeta
 
 
 class DiscountStrategy(ABC):
@@ -28,7 +29,7 @@ class FixedDiscount(DiscountStrategy):
 
 
 @dataclass
-class Product(LoggableMixin, SerializableMixin):
+class Product(metaclass=ModelMeta, LoggableMixin, SerializableMixin):
     name: str
     _price: float
     _quantity: int = 0
@@ -93,6 +94,10 @@ class ProductCalculator:
     @staticmethod
     def calculate_price(product: Product, discount: DiscountStrategy):
         return discount.apply(product.price)
+
+    @staticmethod
+    def calculate_total(product: Product):
+        return product.price * product.quantity
 
 
 class ProductValidator:
