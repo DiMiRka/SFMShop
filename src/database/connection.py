@@ -22,10 +22,12 @@ def get_product_db(conn, product_id: int):
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
-            product = cursor.fetchone()
+            product_db = cursor.fetchone()
+            product = Product(product_db[1], product_db[2], product_db[3])
+            product.id = product_db[0]
             if product is None:
                 return None
-            return product
+            return product.__dict__
     except psycopg2.Error as e:
         print(f"Ошибка при получении товара: {e}")
 
@@ -188,7 +190,6 @@ def create_order_db(conn, user_id, product_id, quantity):
     except Exception as e:
         conn.rollback()
         print(f"Ошибка при создании заказа: {e}")
-
 
 
 def delete_order_db(conn, order_id):
