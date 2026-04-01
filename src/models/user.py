@@ -2,7 +2,7 @@ from src.models.metaclasses import ModelMeta
 from src.models.mixins import SerializableMixin
 
 
-class User(metaclass=ModelMeta, SerializableMixin):
+class User(SerializableMixin, metaclass=ModelMeta):
     def __init__(self, name: str, email: str):
         self.name = name
         self._email = email

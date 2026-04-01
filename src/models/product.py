@@ -30,7 +30,7 @@ class FixedDiscount(DiscountStrategy):
 
 
 @dataclass
-class Product(metaclass=ModelMeta, LoggableMixin, SerializableMixin):
+class Product(LoggableMixin, SerializableMixin, metaclass=ModelMeta):
     name: str
     price: float = PositiveNumber("_price")
     quantity: int = PositiveNumber("_quantity")
@@ -68,11 +68,9 @@ class Product(metaclass=ModelMeta, LoggableMixin, SerializableMixin):
 
 class ProductCalculator:
     @staticmethod
-    @CachedProperty
     def calculate_price(product: Product, discount: DiscountStrategy):
         return discount.apply(product.price)
 
     @staticmethod
-    @CachedProperty
     def calculate_total(product: Product):
         return product.price * product.quantity
