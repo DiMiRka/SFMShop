@@ -10,11 +10,7 @@ class BusinessLogicError(SFMShopException):
     pass
 
 
-class NegativePriceError(ValidationError):
-    pass
-
-
-class NegativeQuantityError(ValidationError):
+class NegativeValidationError(ValidationError):
     pass
 
 
