@@ -43,3 +43,15 @@ def get_user_email(conn, user_id):
         return email
     except psycopg2.Error as e:
         print(f"Ошибка при получении Email пользователя: {e}")
+
+
+def get_user_orders_db(conn, user_id):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM orders WHERE user_id = %s", (user_id,))
+            orders = cursor.fetchall()
+        print(f"Все заказы пользователя {user_id}")
+        for order in orders:
+            print(order)
+    except psycopg2.Error as e:
+        print(f"Ошибка при получении заказов: {e}")
