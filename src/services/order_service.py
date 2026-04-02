@@ -4,8 +4,7 @@ from src.models.order import Order
 from src.models.exceptions import InvalidOrderError
 from src.services.product_service import ProductCalculator
 from src.services.discount_service import DiscountStrategy
-from src.database.users_db import get_user_balance, get_user_email
-from src.database.orders_db import save_order_db
+from src.database import get_user_balance, get_user_email, save_order_db
 
 
 class OrderCalculator:
