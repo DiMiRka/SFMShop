@@ -3,9 +3,6 @@ import os
 from dotenv import load_dotenv
 from contextlib import contextmanager
 
-from src.models import Product
-from src.schemas import ProductCreate
-
 
 load_dotenv()
 

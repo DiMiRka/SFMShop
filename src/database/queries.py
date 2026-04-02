@@ -1,5 +1,5 @@
 import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ
+from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ, ISOLATION_LEVEL_SERIALIZABLE
 from datetime import datetime
 
 
@@ -21,7 +21,7 @@ def get_orders_with_products(conn, user_id):
             print("Заказы пользователя:")
             for order in orders:
                 print(order)
-            print("------------")
+        return orders
 
     except psycopg2.Error as e:
         print(f"Ошибка при получении товаров пользователя: {e}")
@@ -140,25 +140,81 @@ def get_top_products(conn, limit=5):
             for product in products:
                 print(product)
             print("------------")
-            return cursor.fetchall()
+            return products
 
     except psycopg2.Error as e:
         print(f"Ошибка при получении топ товаров: {e}")
 
 
 def generate_sales_report(conn, start_date: datetime):
+    conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
     try:
-        conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
         with conn.cursor() as cursor:
             cursor.execute("SELECT SUM(total) FROM orders WHERE created_at >= %s",
-                           start_date)
+                           (start_date,))
             total = cursor.fetchone()[0] or 0
 
             cursor.execute("SELECT COUNT(*) FROM orders WHERE created_at >= %s",
-                           start_date)
+                           (start_date,))
             count = cursor.fetchone()[0] or 0
 
             return {"total": total, "count": count}
 
     except psycopg2.Error as e:
         print(f"шибка при генерации отчета: {e}")
+
+
+def calculate_total_revenue(conn, start_date, end_date):
+    conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""SELECT COALESCE(SUM(total), 0)
+                              FROM orders
+                              WHERE created_at BETWEEN %s AND %s""",
+                           (start_date, end_date))
+            total = cursor.fetchone()[0]
+
+            cursor.execute(
+                "SELECT COUNT(*) FROM orders "
+                "WHERE created_at BETWEEN %s AND %s",
+                (start_date, end_date)
+            )
+            count = cursor.fetchone()[0]
+
+        return {
+            "total": float(total),
+            "count": count,
+            "average": float(total) / count if count > 0 else 0}
+
+    except psycopg2.Error as e:
+        print(f"Ошибка при расчете выручки: {e}")
+
+
+def critical_financial_operation(conn, from_user_id, to_user_id, amount):
+    conn.set_isolation_level(ISOLATION_LEVEL_SERIALIZABLE)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT balance FROM users WHERE id = %s FOR UPDATE", (from_user_id,))
+            balance = cursor.fetchone()[0]
+
+            if balance < amount:
+                raise ValueError("Недостаточно средств")
+
+            cursor.execute(
+                "UPDATE users SET balance = balance - %s WHERE id = %s",
+                (amount, from_user_id)
+            )
+
+            cursor.execute(
+                "UPDATE users SET balance = balance + %s WHERE id = %s",
+                (amount, to_user_id)
+            )
+        conn.commit()
+        return True
+
+    except psycopg2.Error:
+        conn.rollback()
+        raise
+    except ValueError:
+        conn.rollback()
+        raise

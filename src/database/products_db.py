@@ -1,5 +1,5 @@
 import psycopg2
-
+from fastapi import HTTPException
 from src.models import Product
 from src.schemas import ProductCreate
 
@@ -11,9 +11,9 @@ def get_product_db(conn, product_id: int):
             product_db = cursor.fetchone()
             product = Product(product_db[1], product_db[2], product_db[3])
             product.id = product_db[0]
-            if product is None:
-                return None
-            return product.__dict__
+            if product_db is None:
+                raise HTTPException(status_code=404, detail="Товар не найден")
+            return product_db
     except psycopg2.Error as e:
         print(f"Ошибка при получении товара: {e}")
 
@@ -65,13 +65,13 @@ def update_product_db(conn, product_id, product: ProductCreate):
             cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
             product_db = cursor.fetchone()
             if product_db is None:
-                return None
+                raise HTTPException(status_code=404, detail="Товар не найден")
 
             cursor.execute("UPDATE products "
                            "SET name = %s, price = %s, quantity = %s "
                            "WHERE id = %s",
                            (product.name, product.price, product.quantity, product_id))
-
+            conn.commit()
             return {"id": product_id, "message": "Товар обновлен"}
     except psycopg2.Error as e:
         print(f"Ошибка при обновлении товара: {e}")
@@ -83,10 +83,11 @@ def delete_product_db(conn, product_id):
             cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
             product = cursor.fetchone()
             if product is None:
-                return None
+                raise HTTPException(status_code=404, detail="Товар не найден")
 
             cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
-            return product
+        conn.commit()
+        return {"id": product_id, "message": "Товар удален"}
     except psycopg2.Error as e:
         print(f"Ошибка при удалении товара: {e}")
 
@@ -94,10 +95,15 @@ def delete_product_db(conn, product_id):
 def update_product_price_db(conn, product_id, new_price):
     try:
         with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
+            product = cursor.fetchone()
+            if product is None:
+                raise HTTPException(status_code=404, detail="Товар не найден")
+
             cursor.execute("UPDATE products SET price = %s WHERE id = %s",
                            (new_price, product_id))
-        print(f"Цена обновлена: {new_price}")
         conn.commit()
+        return {"id": product_id, "message": "Стоимость обновлена"}
     except psycopg2.Error as e:
         conn.rollback()
         print(f"Ошибка при обновлении цены: {e}")
