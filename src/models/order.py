@@ -37,6 +37,16 @@ class Order(LoggableMixin, SerializableMixin, metaclass=ModelMeta):
     def __eq__(self, other):
         return self.order_id == other.order_id
 
+    def __len__(self):
+        return len(self.products)
+
+    def __contains__(self, item):
+        return item in self.products
+
+    def __add__(self, other):
+        new_products = self.products + other.products
+        return Order(self.order_id, self.user, new_products)
+
     def add_product(self, product: Product):
         if not isinstance(product, Product):
             raise InvalidOrderError("Такого продукта нет")
