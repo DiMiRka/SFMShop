@@ -2,11 +2,12 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import List
 
-from src.models.product import Product, ProductCalculator
+from src.models.product import Product
 from src.models.user import User
 from src.models.exceptions import InvalidOrderError
 from src.models.mixins import LoggableMixin, SerializableMixin
 from src.models.metaclasses import ModelMeta
+from src.services.order_service import OrderCalculator, OrderValidator
 
 
 @dataclass
@@ -19,6 +20,13 @@ class Order(LoggableMixin, SerializableMixin, metaclass=ModelMeta):
     def __post_init__(self):
         OrderValidator.validate(self)
         self.log(f"Создан заказ: {self.order_id}")
+
+    def to_json(self):
+        return {
+            "order_id": self.order_id,
+            "products": [item.to_dict() for item in self.products],
+            "user": self.user.to_dict()
+        }
 
     def __str__(self):
         return f"Заказ #{self.order_id} на сумму {OrderCalculator.calculate_total(self)} руб. (Пользователь: {self.user})"
@@ -34,18 +42,3 @@ class Order(LoggableMixin, SerializableMixin, metaclass=ModelMeta):
             raise InvalidOrderError("Такого продукта нет")
         else:
             self.products.append(product)
-
-
-class OrderCalculator:
-    @staticmethod
-    def calculate_total(order: Order) -> float:
-        return sum([ProductCalculator.calculate_total(product) for product in order.products])
-
-
-class OrderValidator:
-    @staticmethod
-    def validate(order: Order):
-        if not order.user:
-            raise InvalidOrderError("Пользователь не существует")
-        if not order.products:
-            raise InvalidOrderError("Заказ невалиден: пустой список товаров")

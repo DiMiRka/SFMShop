@@ -1,32 +1,9 @@
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
 
 from src.models.exceptions import InsufficientStockError
 from src.models.mixins import LoggableMixin, SerializableMixin
 from src.models.metaclasses import ModelMeta
-from src.models.descriptors import PositiveNumber, CachedProperty
-
-
-class DiscountStrategy(ABC):
-    @abstractmethod
-    def apply(self, price: float):
-        pass
-
-
-class PercentDiscount(DiscountStrategy):
-    def __init__(self, percent: float):
-        self.percent = percent
-
-    def apply(self, price: float):
-        return price * (1 - self.percent / 100)
-
-
-class FixedDiscount(DiscountStrategy):
-    def __init__(self, amount: float):
-        self.amount = amount
-
-    def apply(self, price: float):
-        return price - self.amount
+from src.models.descriptors import PositiveNumber
 
 
 @dataclass
@@ -64,13 +41,3 @@ class Product(LoggableMixin, SerializableMixin, metaclass=ModelMeta):
         if self.quantity < amount:
             raise InsufficientStockError(f"Товара недостаточно. На складе: {self.quantity}, требуется: {amount}")
         self.quantity = self.quantity - amount
-
-
-class ProductCalculator:
-    @staticmethod
-    def calculate_price(product: Product, discount: DiscountStrategy):
-        return discount.apply(product.price)
-
-    @staticmethod
-    def calculate_total(product: Product):
-        return product.price * product.quantity

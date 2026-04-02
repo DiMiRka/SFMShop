@@ -1,25 +1,25 @@
+from dataclasses import dataclass, field
+
 from src.models.metaclasses import ModelMeta
-from src.models.mixins import SerializableMixin
+from src.models.mixins import SerializableMixin, LoggableMixin
+from src.models.descriptors import EmailDescriptor, PositiveNumber, NotNull, AgeDescriptor
 
 
-class User(SerializableMixin, metaclass=ModelMeta):
-    def __init__(self, name: str, email: str):
-        self.name = name
-        self._email = email
-        if "@" not in email:
-            raise ValueError("Неверный формат email")
+@dataclass
+class User(LoggableMixin, SerializableMixin, metaclass=ModelMeta):
+    id: int = PositiveNumber('id')
+    name: str = NotNull("name")
+    email: str = EmailDescriptor("_email")
+    age: int = AgeDescriptor("age")
+    balance: int = PositiveNumber("balance")
+    orders: list = field(default_factory=list)
+    is_active: bool = True
+
+    def __post_init__(self):
+        self.log(f"Создан: {self.name}")
 
     def __str__(self):
         return self.name
 
     def get_info(self) -> str:
-        return f"Пользователь: {self.name}, Email: {self._email}"
-
-    def get_email(self) -> str:
-        return self._email
-
-    def set_email(self, email: str):
-        if "@" not in email:
-            raise ValueError("Неверный формат email")
-        else:
-            self._email = email
+        return f"Пользователь: {self.name}, Email: {self.email}"
