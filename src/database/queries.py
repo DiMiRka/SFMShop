@@ -218,3 +218,63 @@ def critical_financial_operation(conn, from_user_id, to_user_id, amount):
     except ValueError:
         conn.rollback()
         raise
+
+import time
+from src.database.connection import connect_to_db
+
+
+def measure_query_performance():
+    with connect_to_db() as conn:
+        with conn.cursor() as cur:
+            start_time = time.time()
+            cur.execute("SELECT * FROM products WHERE name = %s", ("Ноутбук",))
+            result = cur.fetchone()
+            time_without_index = time.time() - start_time
+
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)")
+            conn.commit()
+
+            start_time = time.time()
+            cur.execute("SELECT * FROM products WHERE name = %s", ("Ноутбук",))
+            result = cur.fetchone()
+            time_with_index = time.time() - start_time
+
+            print(f"Поиск товара по имени Без индекса: {time_without_index:.4f} сек")
+            print(f"Поиск товара по имени С индексом: {time_with_index:.4f} сек")
+            print(f"Поиск товара по имени Ускорение: {time_without_index / time_with_index:.2f}x")
+
+            start_time = time.time()
+            cur.execute("SELECT * FROM orders WHERE user_id = %s", (2,))
+            result = cur.fetchone()
+            time_without_index = time.time() - start_time
+
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
+            conn.commit()
+
+            start_time = time.time()
+            cur.execute("SELECT * FROM orders WHERE user_id = %s", (2,))
+            result = cur.fetchone()
+            time_with_index = time.time() - start_time
+
+            print(f"Поиск заказа по id пользователя Без индекса: {time_without_index:.4f} сек")
+            print(f"Поиск заказа по id пользователя С индексом: {time_with_index:.4f} сек")
+            print(f"Поиск заказа по id пользователя Ускорение: {time_without_index / time_with_index:.2f}x")
+
+            start_time = time.time()
+            cur.execute("SELECT * FROM users WHERE email = %s", ("dima@example.com",))
+            result = cur.fetchone()
+            time_without_index = time.time() - start_time
+
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+            conn.commit()
+
+            start_time = time.time()
+            cur.execute("SELECT * FROM users WHERE email = %s", ("dima@example.com",))
+            result = cur.fetchone()
+            time_with_index = time.time() - start_time
+
+            print(f"Поиск пользователя по email Без индекса: {time_without_index:.4f} сек")
+            print(f"Поиск пользователя по email С индексом: {time_with_index:.4f} сек")
+            print(f"Поиск пользователя по email Ускорение: {time_without_index / time_with_index:.2f}x")
+
+measure_query_performance()
