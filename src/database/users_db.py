@@ -1,5 +1,6 @@
 import psycopg2
-
+from fastapi import HTTPException
+from src.models.exceptions import BusinessLogicError
 
 def create_user_db(conn, name, email, age, balance):
     try:
@@ -55,3 +56,29 @@ def get_user_orders_db(conn, user_id):
             print(order)
     except psycopg2.Error as e:
         print(f"Ошибка при получении заказов: {e}")
+
+
+def transfer_money(conn, from_user_id: int, to_user_id: int, amount: int):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM users WHERE id = %s", (from_user_id,))
+            from_user = cursor.fetchone()
+            if from_user is None:
+                raise HTTPException(status_code=404, detail="Отправитель не найден")
+            from_balance = from_user.balance - amount
+            if from_balance < 0:
+                conn.rollback()
+                raise BusinessLogicError("Недостаточно средств на балансе")
+
+            cursor.execute("SELECT * FROM users WHERE id = %s" , (to_user_id,))
+            to_user = cursor.fetchone()
+            if to_user is None:
+                raise HTTPException(status_code=404, detail="Получатель не найден")
+            to_balance = to_user.balance + amount
+
+            cursor.execute("UPDATE users SET balance = %s WHERE id = %s", (from_balance, from_user_id))
+            cursor.execute("UPDATE users SET balance = %s WHERE id = %s", (to_balance, to_user_id))
+
+        conn.commit()
+    except psycopg2.Error as e:
+        print(f"Ошибкам при переводе средств: {e}")
