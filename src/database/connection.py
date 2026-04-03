@@ -1,32 +1,37 @@
-import psycopg2
 import os
 from dotenv import load_dotenv
-from contextlib import contextmanager
+from typing import Union, Callable, Annotated, Any, AsyncGenerator
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import (async_sessionmaker, create_async_engine,
+                                    AsyncSession, AsyncEngine, AsyncConnection)
 
 
 load_dotenv()
 
-DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", 5432)),
-    "database": os.getenv("DB_NAME", "sfmshop"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD")
-}
+
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
-@contextmanager
-def connect_to_db():
-    conn = None
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        yield conn
-        conn.commit()
-    except psycopg2.Error as e:
-        if conn:
-            conn.rollback()
-        print(f"Ошибка БД: {e}")
-        raise
-    finally:
-        if conn:
-            conn.close()
+def create_sessionmaker(
+        bind_engine: Union[AsyncEngine, AsyncConnection]
+) -> async_sessionmaker:
+    return async_sessionmaker(
+        bind=bind_engine,
+        expire_on_commit=False,
+        class_=AsyncSession,
+    )
+
+
+engine = create_async_engine(f"postgresql+asyncpg://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@"
+                             f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}")
+
+async_session = create_sessionmaker(engine)
+
+db_dependency = Annotated[AsyncSession, Depends(get_async_session)]

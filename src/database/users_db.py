@@ -1,98 +1,85 @@
-import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_READ_COMMITTED, ISOLATION_LEVEL_REPEATABLE_READ
+from sqlalchemy import select
 from fastapi import HTTPException
+
+from src.database.connection import db_dependency
+from src.database.models import User, Order
 from src.models.exceptions import BusinessLogicError
 
 
-def create_user_db(conn, name, email, age, balance):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                           INSERT INTO users (name, email, age, balance)
-                           VALUES (%s, %s, %s, %s)""", (name, email, age, balance))
-        conn.commit()
-    except psycopg2.Error as e:
-        conn.rollback()
-        print(f"Ошибка при создании пользователя: {e}")
+async def create_user_db(db: db_dependency, name, email, age, balance):
+    user = User(name=name, email=email, age=age, balance=balance)
+    db.add(user)
+
+    return {"message": "Пользователь создан"}
 
 
-def get_user_by_id_db(conn, user_id):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-            user = cursor.fetchone()
+async def get_users_db(db: db_dependency):
+    results = await db.execute(select(User))
+    users = results.scalars().all()
 
-            return user
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении пользователя: {e}")
-        return None
+    return users
 
 
-def get_user_balance_db(conn, user_id):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
-            balance = cursor.fetchone()
-        return balance[0]
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении баланса пользователя: {e}")
+async def get_user_by_id_db(db: db_dependency, user_id):
+    results = await db.execute(select(User).where(User.id == user_id))
+    user = results.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    return user
 
 
-def get_user_email_db(conn, user_id):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT email FROM users WHERE id = %s", (user_id,))
-            email = cursor.fetchone()[0]
-        return email
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении Email пользователя: {e}")
+async def get_user_balance_db(db: db_dependency, user_id):
+    result = await db.execute(select(User.balance).where(User.id == user_id))
+    balance = result.scalar_one_or_none()
+
+    if not balance:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    return balance
 
 
-def get_user_orders_db(conn, user_id):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM orders WHERE user_id = %s", (user_id,))
-            orders = cursor.fetchall()
-        return orders
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении заказов: {e}")
+async def get_user_email_db(db: db_dependency, user_id):
+    result = await db.execute(select(User.email).where(User.id == user_id))
+    email = result.scalar_one_or_none()
+
+    if not email:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    return email
 
 
-def transfer_money_db(conn, from_user_id: int, to_user_id: int, amount: int):
-    conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM users WHERE id = %s", (from_user_id,))
-            from_user = cursor.fetchone()
-            if from_user is None:
-                raise HTTPException(status_code=404, detail="Отправитель не найден")
+async def get_user_orders_db(db: db_dependency, user_id: int):
+    result = await db.execute(select(Order).where(Order.user_id == user_id))
+    orders = result.scalars().all()
 
-            from_user_balance = from_user.balance - amount
-            if from_user_balance < 0:
-                conn.rollback()
-                raise BusinessLogicError("Недостаточно средств на балансе")
+    if not orders:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-            cursor.execute("SELECT * FROM users WHERE id = %s", (to_user_id,))
-            to_user = cursor.fetchone()
-            if to_user is None:
-                raise HTTPException(status_code=404, detail="Получатель не найден")
-
-            to_user_balance = to_user.balance + amount
-
-            cursor.execute("UPDATE users SET balance = %s WHERE id = %s", (from_user_balance, from_user_id))
-            cursor.execute("UPDATE users SET balance = %s WHERE id = %s", (to_user_balance, to_user_id))
-
-        conn.commit()
-    except psycopg2.Error as e:
-        print(f"Ошибкам при переводе средств: {e}")
+    return orders
 
 
-def read_user_balance_db(conn, user_id):
-    conn.set_isolation_level(ISOLATION_LEVEL_READ_COMMITTED)
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
-            balance = cursor.fetchone()[0]
-        return balance
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении баланса пользователя: {e}")
+async def transfer_money_db(db: db_dependency, from_user_id: int, to_user_id: int, amount: int):
+    async with db.connection() as conn:
+        await conn.execution_options(isolation_level="REPEATABLE_READ")
+
+    async with db.begin():
+
+        result = await db.execute(select(User).where(User.id == from_user_id).with_for_update())
+        from_user = result.scalar_one_or_none()
+        if from_user is None:
+            raise HTTPException(status_code=404, detail="Отправитель не найден")
+
+        if from_user.balance < amount:
+            raise BusinessLogicError("Недостаточно средств на балансе")
+
+        result = await db.execute(select(User).where(User.id == to_user_id).with_for_update())
+        to_user = result.scalar_one_or_none()
+        if to_user is None:
+            raise HTTPException(status_code=404, detail="Получатель не найден")
+
+        from_user.balance -= amount
+        to_user.balance += amount
+
+    return {"message": "Денежные средства переведены"}

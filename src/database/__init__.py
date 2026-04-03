@@ -1,5 +1,5 @@
-from src.database.connection import connect_to_db
+from src.database.connection import db_dependency
 
 __all__ = [
-    'connect_to_db',
+    'db_dependency',
 ]

@@ -1,109 +1,66 @@
-import psycopg2
 from fastapi import HTTPException
+from sqlalchemy import select
+
+from src.database.connection import db_dependency
+from src.database.models import Product
 from src.models import Product
 from src.schemas import ProductCreate
+from src.schemas.products import ProductUpdate
 
 
-def get_product_db(conn, product_id: int):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
-            product_db = cursor.fetchone()
-            product = Product(product_db[1], product_db[2], product_db[3])
-            product.id = product_db[0]
-            if product_db is None:
-                raise HTTPException(status_code=404, detail="Товар не найден")
-            return product_db
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении товара: {e}")
+async def get_product_db(db: db_dependency, product_id: int):
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    product = result.scalar_one_or_none()
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    return product
 
 
-def add_product_db(conn, product: ProductCreate):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO products (name, price, quantity)"
-                           "VALUES (%s, %s, %s)"
-                           "RETURNING id",
-                           (product.name, product.price, product.quantity))
-            print(f"Товар добавлен: {product.name}, {product.price}, {product.quantity}")
-            product_id = cursor.fetchone()[0]
-            conn.commit()
-            return {"id": product_id, "message": "Товар добавлен"}
-    except psycopg2.Error as e:
-        conn.rollback()
-        print(f"Ошибка при добавлении товара: {e}")
+async def add_product_db(db: db_dependency, product: ProductCreate):
+    product_db = Product(**product.model_dump())
+    db.add(product_db)
+    await db.flush()
+
+    return {"id": product.id, "message": "Товар добавлен"}
 
 
-def get_all_products_db(conn, limit: int, offset: int):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM products")
-            all_products = cursor.fetchall()
+async def get_all_products_db(db: db_dependency, limit: int, offset: int):
+    result = await db.execute(select(Product).offset(offset).limit(limit))
+    products = result.scalars().all()
+    total = len(products)
 
-            products = []
-            for data in all_products:
-                product = Product(name=data[1], price=data[2], quantity=data[3])
-                product.id = data[0]
-                products.append(product.__dict__)
-
-            total = len(all_products)
-            paginated_products = products[offset:offset+limit]
-
-        return {
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "products": paginated_products
-        }
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении товаров: {e}")
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "products": products,
+    }
 
 
-def update_product_db(conn, product_id, product: ProductCreate):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
-            product_db = cursor.fetchone()
-            if product_db is None:
-                raise HTTPException(status_code=404, detail="Товар не найден")
+async def update_product_db(db: db_dependency, product_id, product: ProductUpdate):
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    product_db = result.scalar_one_or_none()
 
-            cursor.execute("UPDATE products "
-                           "SET name = %s, price = %s, quantity = %s "
-                           "WHERE id = %s",
-                           (product.name, product.price, product.quantity, product_id))
-            conn.commit()
-            return {"id": product_id, "message": "Товар обновлен"}
-    except psycopg2.Error as e:
-        print(f"Ошибка при обновлении товара: {e}")
+    if not product_db:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    updated_product = product.model_dump()
+
+    for field, value in updated_product.items():
+        setattr(product_db, field, value)
+
+    return {"id": product_id, "message": "Товар обновлен"}
 
 
-def delete_product_db(conn, product_id):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
-            product = cursor.fetchone()
-            if product is None:
-                raise HTTPException(status_code=404, detail="Товар не найден")
+async def delete_product_db(db: db_dependency, product_id):
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    product = result.scalar_one_or_none()
 
-            cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
-        conn.commit()
-        return {"id": product_id, "message": "Товар удален"}
-    except psycopg2.Error as e:
-        print(f"Ошибка при удалении товара: {e}")
+    if not product:
+        raise HTTPException(status_code=404, detail="Товар не найден")
 
+    await db.delete(product)
 
-def update_product_price_db(conn, product_id, new_price):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
-            product = cursor.fetchone()
-            if product is None:
-                raise HTTPException(status_code=404, detail="Товар не найден")
-
-            cursor.execute("UPDATE products SET price = %s WHERE id = %s",
-                           (new_price, product_id))
-        conn.commit()
-        return {"id": product_id, "message": "Стоимость обновлена"}
-    except psycopg2.Error as e:
-        conn.rollback()
-        print(f"Ошибка при обновлении цены: {e}")
+    return {"id": product_id, "message": "Товар удален"}

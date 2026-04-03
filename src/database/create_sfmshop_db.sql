@@ -2,6 +2,7 @@ DROP TABLE IF EXISTS order_items;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS reviews;
 
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -26,7 +27,6 @@ CREATE TABLE orders (
     user_id INTEGER REFERENCES users(id),
     total DECIMAL(10,2),
     created_at TIMESTAMP DEFAULT NOW(),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE order_items (
@@ -37,6 +37,14 @@ CREATE TABLE order_items (
     price DECIMAL(10,2) NOT NULL
 );
 
+CREATE TABLE reviews (
+    id SERIAL PRIMARY KEY,
+    product_id INTEGER REFERENCES products(id),
+    user_id INTEGER REFERENCES users(id),
+    review_text TEXT,
+    rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 INSERT INTO users (name, email, age, balance) VALUES
 ('Dima', 'dima@example.com', 31, 55000),

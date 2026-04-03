@@ -1,89 +1,67 @@
-import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ
 from fastapi import HTTPException
+from sqlalchemy import select
 
-from src.models import Product, Order, User
 from src.models.exceptions import InsufficientStockError, BusinessLogicError
-from src.services.order_service import OrderCalculator
+from src.database.connection import db_dependency
+from src.database.models import Order, User, Product, OrderItem
 
 
-def create_order_db(conn, user_id, product_id, quantity):
-    conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
-    try:
-        with conn.cursor() as cursor:
+async def create_order_db(db: db_dependency, user_id, product_id, quantity):
+    async with db.connection() as conn:
+        await conn.execution_options(isolation_level="REPEATABLE_READ")
 
-            cursor.execute("SELECT * FROM products WHERE id = %s FOR UPDATE", (product_id,))
-            product_db = cursor.fetchone()
-            if product_db is None:
-                raise HTTPException(status_code=404, detail="Товар не найден")
-            product = Product(name=product_db[1], price=product_db[2], quantity=quantity)
-            new_quantity = product_db[3] - quantity
-            if new_quantity < 0:
-                raise InsufficientStockError("Недостаточно товара на складе")
-            cursor.execute("UPDATE products SET quantity = %s WHERE id = %s",
-                           (new_quantity, product_id,))
+    async with db.begin():
+        result = db.execute(select(Product).where(Product.id == product_id).with_for_update())
+        product_db = result.scalar_one_or_none()
 
-            cursor.execute("SELECT * FROM users WHERE id = %s FOR UPDATE", (user_id,))
-            user_db = cursor.fetchone()
-            if user_db is None:
-                raise HTTPException(status_code=404, detail="Пользователь не найден")
-            user = User(name=user_db[1], email=user_db[2])
-            user.id = user_db[0]
+        if not product_db:
+            raise HTTPException(status_code=404, detail="Товар не найден")
 
-            order = Order(order_id=1, user=user, products=[product])
+        if product_db.quantity < quantity:
+            raise InsufficientStockError("Недостаточно товара на складе")
 
-            total = OrderCalculator.calculate_total(order)
+        product_db.quantity -= quantity
 
-            user_balance = user_db[4] - total
-            if user_balance < 0:
-                raise BusinessLogicError("Недостаточно средств на балансе пользователя")
+        result = await db.execute(select(User).where(User.id == user_id).with_for_update())
+        user_db = result.scalar_one_or_none()
 
-            cursor.execute("UPDATE users SET balance = %s WHERE id = %s", (user_balance, user_db[0]))
+        if not user_db:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-            cursor.execute(
-                "INSERT INTO orders (user_id, total) VALUES (%s, %s) RETURNING id",
-                (user_id, total)
-            )
-            order_id = cursor.fetchone()[0]
-            order.id = order_id
+        total = product_db.price * quantity
 
-            cursor.execute(
-                """INSERT INTO order_items (order_id, product_id, quantity, price) 
-                   VALUES (%s, %s, %s, %s)""",
-                (order_id, product_id, quantity, product_db[2])
-            )
-        conn.commit()
-        return {
-            "order_id": order_id,
-            "user_id": user_id,
-            "product_id": product_id,
-            "quantity": quantity,
-            "total": float(total)
-        }
+        if user_db.balance < total:
+            raise BusinessLogicError("Недостаточно средств на балансе пользователя")
 
-    except psycopg2.Error as e:
-        conn.rollback()
-        print(f"Ошибка при создании заказа: {e}")
-    except Exception as e:
-        conn.rollback()
-        print(f"Ошибка при создании заказа: {e}")
+        user_db.balance -= total
+
+        order = Order(user=user_db, items=[])
+        db.add(order)
+        await db.flush()
+
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=product_id,
+            quantity=quantity,
+            total=total,
+        )
+        db.add(order_item)
+
+    return {
+        "order_id": order.id,
+        "user_id": user_db.id,
+        "product_id": product_db.id,
+        "quantity": quantity,
+        "total": float(total),
+    }
 
 
-def delete_order_db(conn, order_id):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM orders WHERE id = %s", (order_id,))
-            order = cursor.fetchone()
-            if order is None:
-                raise HTTPException(status_code=404, detail="Заказ не найден")
+async def delete_order_db(db: db_dependency, order_id):
+    result = db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
 
-            cursor.execute(
-                "DELETE FROM orders WHERE id = %s",
-                (order_id,)
-            )
-        conn.commit()
-        return {"id": order_id, "message": "Заказ удален"}
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    await db.delete(order)
 
-    except psycopg2.Error as e:
-        conn.rollback()
-        print(f"Ошибка при удалении заказа: {e}")
+    return {"id": order_id, "message": "Заказ удален"}

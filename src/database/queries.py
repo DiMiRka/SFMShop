@@ -1,280 +1,204 @@
-import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ, ISOLATION_LEVEL_SERIALIZABLE
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from datetime import datetime
 
-
-def get_orders_with_products(conn, user_id):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                           SELECT orders.id     AS order_id,
-                                  products.name AS product_name,
-                                  order_items.quantity,
-                                  order_items.price
-                           FROM orders
-                                    INNER JOIN order_items ON orders.id = order_items.order_id
-                                    INNER JOIN products ON products.id = order_items.product_id
-                           WHERE orders.user_id = %s
-                           """, (user_id,))
-
-            orders = cursor.fetchall()
-            print("Заказы пользователя:")
-            for order in orders:
-                print(order)
-        return orders
-
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении товаров пользователя: {e}")
+from src.database.connection import db_dependency
+from src.database.models import Order, OrderItem, User, Product
 
 
-def get_orders_count_by_users(conn):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                           SELECT users.id,
-                                  users.name,
-                                  COUNT(orders.id) AS orders_count
-                           FROM users
-                                    LEFT JOIN orders ON users.id = orders.user_id
-                           GROUP BY users.id, users.name
-                           ORDER BY orders_count DESC
-                           """)
-            orders = cursor.fetchall()
+async def get_orders_with_products(db: db_dependency, user_id: int):
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .where(Order.user_id == user_id)
+    )
 
-            print("Количество заказов пользователей")
-            for order in orders:
-                print(order)
-            print("------------")
+    orders = result.scalars().all()
 
-            return orders
+    data = []
+    for order in orders:
+        for item in order.items:
+            data.append({
+                "order_id": order.id,
+                "product": item.product.name,
+                "quantity": item.quantity,
+                "price": item.price,
+            })
 
-    except psycopg2.Error as e:
-        print(f"Ошибка при подсчете заказов: {e}")
+    return data
 
 
-def get_products_sorted_by_price(conn):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                           SELECT id, name, price, quantity
-                           FROM products
-                           ORDER BY price DESC
-                           """)
+async def get_orders_count_by_users(db: db_dependency):
+    orders_count = func.count(Order.id)
 
-            products = cursor.fetchall()
-            print("Продукты по убыванию цены:")
-            for product in products:
-                print(product)
-            print("------------")
-            return products
+    result = await db.execute(
+        select(User.id, User.name, orders_count.label("orders_count"))
+        .outerjoin(Order)
+        .group_by(User.id, User.name)
+        .order_by(orders_count.desc())
+    )
 
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении товаров: {e}")
+    return result.all()
 
 
-def get_user_order_history(conn, user_id):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                           SELECT orders.id     AS order_id,
-                                  orders.created_at,
-                                  products.name AS product_name,
-                                  products.price,
-                                  order_items.quantity
-                           FROM orders
-                                    INNER JOIN order_items ON orders.id = order_items.order_id
-                                    INNER JOIN products ON products.id = order_items.product_id
-                           WHERE orders.user_id = %s
-                           ORDER BY orders.created_at DESC
-                           """, (user_id,))
-            orders = cursor.fetchall()
-            print("История заказов пользователя:")
-            for order in orders:
-                print(order)
-            print("------------")
-            return orders
+async def get_products_sorted_by_price(db: db_dependency):
+    result = await db.execute(select(Product).order_by(Product.price.desc()))
 
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении истории заказов: {e}")
+    return result.scalars().all()
 
 
-def get_order_statistics(conn):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                           SELECT users.id,
-                                  users.name,
-                                  COUNT(orders.id)  AS orders_count,
-                                  SUM(orders.total) AS total_amount
-                           FROM users
-                                    LEFT JOIN orders ON users.id = orders.user_id
-                           GROUP BY users.id, users.name
-                           ORDER BY total_amount DESC
-                           """)
-            orders = cursor.fetchall()
-            print("Статистика заказов пользователей")
-            for order in orders:
-                print(order)
-            print("------------")
-            return orders
+async def get_user_order_history(db: db_dependency, user_id):
+    result = await db.execute(
+        select(
+            Order.id.label("order_id"),
+            Order.created_at,
+            Product.name.label("product_name"),
+            Product.price.label("product_price"),
+            OrderItem.quantity.label("order_quantity"),
+        )
+        .join(OrderItem, Order.id == OrderItem.order_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .where(Order.user_id == user_id)
+        .order_by(Order.created_at.desc())
+    )
 
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении статистики: {e}")
+    orders = result.all()
 
-
-def get_top_products(conn, limit=5):
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                           SELECT products.id,
-                                  products.name,
-                                  SUM(order_items.quantity) AS total_sold
-                           FROM products
-                                    INNER JOIN order_items ON products.id = order_items.product_id
-                           GROUP BY products.id, products.name
-                           ORDER BY total_sold DESC
-                           LIMIT %s
-                           """, (limit,))
-            products = cursor.fetchall()
-            print("Популярные товары:")
-            for product in products:
-                print(product)
-            print("------------")
-            return products
-
-    except psycopg2.Error as e:
-        print(f"Ошибка при получении топ товаров: {e}")
+    print("История заказов пользователя:")
+    for order in orders:
+        print(order)
+    print("------------")
+    return orders
 
 
-def generate_sales_report(conn, start_date: datetime):
-    conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT SUM(total) FROM orders WHERE created_at >= %s",
-                           (start_date,))
-            total = cursor.fetchone()[0] or 0
+async def get_order_statistics(db: db_dependency):
+    order_count = func.count(Order.id)
+    total_amount = func.coalesce(func.sum(Order.total), 0)
 
-            cursor.execute("SELECT COUNT(*) FROM orders WHERE created_at >= %s",
-                           (start_date,))
-            count = cursor.fetchone()[0] or 0
+    result = await db.execute(
+        select(
+            User.id,
+            User.name,
+            order_count.label("order_count"),
+            total_amount.label("total_amount"),
+        )
+        .outerjoin(Order, User.id == Order.user_id)
+        .group_by(User.id, User.name)
+        .order_by(total_amount.desc())
+    )
 
-            return {"total": total, "count": count}
+    orders = result.all()
 
-    except psycopg2.Error as e:
-        print(f"шибка при генерации отчета: {e}")
+    print("Статистика заказов пользователей")
+    for row in orders:
+        print(row)
+    print("------------")
+
+    return orders
 
 
-def calculate_total_revenue(conn, start_date, end_date):
-    conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""SELECT COALESCE(SUM(total), 0)
-                              FROM orders
-                              WHERE created_at BETWEEN %s AND %s""",
-                           (start_date, end_date))
-            total = cursor.fetchone()[0]
+async def get_top_products(db: db_dependency, limit=5):
+    total_sold = func.coalesce(func.sum(OrderItem.quantity), 0)
 
-            cursor.execute(
-                "SELECT COUNT(*) FROM orders "
-                "WHERE created_at BETWEEN %s AND %s",
-                (start_date, end_date)
+    result = await db.execute(
+        select(
+            Product.id,
+            Product.name,
+            total_sold.label("total_sold"),
+        )
+        .join(OrderItem, Product.id == OrderItem.product_id)
+        .group_by(Product.id, Product.name)
+        .order_by(total_sold.desc())
+        .limit(limit)
+    )
+
+    products = result.all()
+
+    print("Популярные товары:")
+    for row in products:
+        print(row)
+    print("------------")
+
+    return products
+
+
+async def generate_sales_report(db: db_dependency, start_date: datetime):
+    async with db.connection() as conn:
+        await conn.execution_options(isolation_level="REPEATABLE_READ")
+
+    async with db.begin():
+        result = await db.execute(
+            select(func.coalesce(func.sum(Order.total), 0))
+            .where(Order.created_at >= start_date)
+        )
+        total = result.scalar()
+
+        result = await db.execute(
+            select(func.count())
+            .select_from(Order)
+            .where(Order.created_at >= start_date)
+        )
+        count = result.scalar()
+
+    return {
+        "total": total,
+        "count": count,
+    }
+
+
+async def calculate_total_revenue(db: db_dependency, start_date, end_date):
+    async with db.connection() as conn:
+        await conn.execution_options(isolation_level="REPEATABLE_READ")
+
+    async with db.begin():
+        result = await db.execute(
+            select(
+                func.coalesce(func.sum(Order.total), 0),
+                func.count()
             )
-            count = cursor.fetchone()[0]
+            .where(Order.created_at.between(start_date, end_date))
+        )
 
-        return {
-            "total": float(total),
-            "count": count,
-            "average": float(total) / count if count > 0 else 0}
+    total, count = result.one()
 
-    except psycopg2.Error as e:
-        print(f"Ошибка при расчете выручки: {e}")
+    return {
+        "total": total,
+        "count": count,
+        "average": float(total) / count if count else None
+    }
 
 
-def critical_financial_operation(conn, from_user_id, to_user_id, amount):
-    conn.set_isolation_level(ISOLATION_LEVEL_SERIALIZABLE)
+def create_order_old(conn, user_id, product_id, quantity, total):
+    cur = conn.cursor()
+
+    cur.execute("INSERT INTO orders (user_id, total) VALUES (%s, %s)", (user_id, total))
+    cur.execute("UPDATE products SET quantity = quantity - %s WHERE id = %s", (quantity, product_id))
+
+    conn.commit()
+    conn.close()
+
+
+def create_order_improved(conn, user_id, product_id, quantity, total):
+    conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
+
     try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT balance FROM users WHERE id = %s FOR UPDATE", (from_user_id,))
-            balance = cursor.fetchone()[0]
-
-            if balance < amount:
+        with conn.cursor() as cur:
+            cur.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
+            balance = cur.fetchone()[0]
+            if balance < total:
                 raise ValueError("Недостаточно средств")
 
-            cursor.execute(
-                "UPDATE users SET balance = balance - %s WHERE id = %s",
-                (amount, from_user_id)
-            )
+            cur.execute("INSERT INTO orders (user_id, total) VALUES (%s, %s)", (user_id, total))
+            cur.execute("UPDATE products SET quantity = quantity - %s WHERE id = %s", (quantity, product_id))
 
-            cursor.execute(
-                "UPDATE users SET balance = balance + %s WHERE id = %s",
-                (amount, to_user_id)
-            )
-        conn.commit()
-        return True
+            cur.execute("SELECT quantity FROM products WHERE id = %s", (product_id,))
+            new_quantity = cur.fetchone()[0]
+            if new_quantity < 0:
+                raise ValueError("Количество товара стало отрицательным")
 
-    except psycopg2.Error:
+            conn.commit()
+
+    except Exception as e:
         conn.rollback()
         raise
-    except ValueError:
-        conn.rollback()
-        raise
-
-import time
-from src.database.connection import connect_to_db
-
-
-def measure_query_performance():
-    with connect_to_db() as conn:
-        with conn.cursor() as cur:
-            start_time = time.time()
-            cur.execute("SELECT * FROM products WHERE name = %s", ("Ноутбук",))
-            result = cur.fetchone()
-            time_without_index = time.time() - start_time
-
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)")
-            conn.commit()
-
-            start_time = time.time()
-            cur.execute("SELECT * FROM products WHERE name = %s", ("Ноутбук",))
-            result = cur.fetchone()
-            time_with_index = time.time() - start_time
-
-            print(f"Поиск товара по имени Без индекса: {time_without_index:.4f} сек")
-            print(f"Поиск товара по имени С индексом: {time_with_index:.4f} сек")
-            print(f"Поиск товара по имени Ускорение: {time_without_index / time_with_index:.2f}x")
-
-            start_time = time.time()
-            cur.execute("SELECT * FROM orders WHERE user_id = %s", (2,))
-            result = cur.fetchone()
-            time_without_index = time.time() - start_time
-
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
-            conn.commit()
-
-            start_time = time.time()
-            cur.execute("SELECT * FROM orders WHERE user_id = %s", (2,))
-            result = cur.fetchone()
-            time_with_index = time.time() - start_time
-
-            print(f"Поиск заказа по id пользователя Без индекса: {time_without_index:.4f} сек")
-            print(f"Поиск заказа по id пользователя С индексом: {time_with_index:.4f} сек")
-            print(f"Поиск заказа по id пользователя Ускорение: {time_without_index / time_with_index:.2f}x")
-
-            start_time = time.time()
-            cur.execute("SELECT * FROM users WHERE email = %s", ("dima@example.com",))
-            result = cur.fetchone()
-            time_without_index = time.time() - start_time
-
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
-            conn.commit()
-
-            start_time = time.time()
-            cur.execute("SELECT * FROM users WHERE email = %s", ("dima@example.com",))
-            result = cur.fetchone()
-            time_with_index = time.time() - start_time
-
-            print(f"Поиск пользователя по email Без индекса: {time_without_index:.4f} сек")
-            print(f"Поиск пользователя по email С индексом: {time_with_index:.4f} сек")
-            print(f"Поиск пользователя по email Ускорение: {time_without_index / time_with_index:.2f}x")
-
-measure_query_performance()
