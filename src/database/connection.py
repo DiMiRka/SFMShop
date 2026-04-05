@@ -1,6 +1,7 @@
 import os
+import redis
 from dotenv import load_dotenv
-from typing import Union, Callable, Annotated, Any, AsyncGenerator
+from typing import Union, Annotated, AsyncGenerator
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import (async_sessionmaker, create_async_engine,
                                     AsyncSession, AsyncEngine, AsyncConnection)
@@ -35,3 +36,5 @@ engine = create_async_engine(f"postgresql+asyncpg://{os.getenv('DB_USER')}:{os.g
 async_session = create_sessionmaker(engine)
 
 db_dependency = Annotated[AsyncSession, Depends(get_async_session)]
+
+redis_client = redis.asyncio.Redis(host=os.getenv('REDIS_HOST'), port=int(os.getenv('REDIS_PORT')), db=int(os.getenv('REDIS_DB')), decode_responses=True)

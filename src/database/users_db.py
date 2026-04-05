@@ -1,70 +1,115 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 from fastapi import HTTPException
 
-from src.database.connection import db_dependency
+from src.database.connection import db_dependency, redis_client
 from src.database.models import User, Order
+from src.schemas import UserResponse, OrderResponse
 from src.models.exceptions import BusinessLogicError
+from src.services.cache_service import CacheService
+
+cache = CacheService(redis_client)
 
 
 async def create_user_db(db: db_dependency, name, email, age, balance):
     user = User(name=name, email=email, age=age, balance=balance)
     db.add(user)
 
+    await cache.delete("users")
+
     return {"message": "Пользователь создан"}
 
 
 async def get_users_db(db: db_dependency):
+    if (cached := await cache.get("users")) is not None:
+        return cached
+
     results = await db.execute(select(User))
     users = results.scalars().all()
 
-    return users
+    users_data = [
+        UserResponse.model_validate(user).model_dump(mode="json")
+        for user in users
+    ]
+
+    await cache.set("users", users_data)
+
+    return users_data
 
 
 async def get_user_by_id_db(db: db_dependency, user_id):
+
+    if (cached := await cache.get(f"user:{user_id}")) is not None:
+        return cached
+
     results = await db.execute(select(User).where(User.id == user_id))
     user = results.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    return user
+    user_data = UserResponse.model_validate(user).model_dump(mode="json")
+
+    await cache.set(f"user:{user_id}", user_data)
+
+    return user_data
 
 
 async def get_user_balance_db(db: db_dependency, user_id):
+
+    if (cached := await cache.get(f"user_balance:{user_id}")) is not None:
+        return cached
+
     result = await db.execute(select(User.balance).where(User.id == user_id))
     balance = result.scalar_one_or_none()
 
-    if not balance:
+    if balance is None:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    await cache.set(f"user_balance:{user_id}", balance)
 
     return balance
 
 
 async def get_user_email_db(db: db_dependency, user_id):
+
+    if (cached := await cache.get(f"user_email:{user_id}")) is not None:
+        return cached
+
     result = await db.execute(select(User.email).where(User.id == user_id))
     email = result.scalar_one_or_none()
 
-    if not email:
+    if email is None:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    await cache.set(f"user_email:{user_id}", email)
 
     return email
 
 
 async def get_user_orders_db(db: db_dependency, user_id: int):
+
+    if (cached := await cache.get(f"user_orders:{user_id}")) is not None:
+        return cached
+
     result = await db.execute(select(Order).where(Order.user_id == user_id))
     orders = result.scalars().all()
 
-    if not orders:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    orders_data = [
+        OrderResponse.model_validate(order).model_dump(mode="json")
+        for order in orders
+    ]
 
-    return orders
+    await cache.set(f"user_orders:{user_id}", orders_data)
+
+    return orders_data
 
 
 async def transfer_money_db(db: db_dependency, from_user_id: int, to_user_id: int, amount: int):
-    async with db.connection() as conn:
-        await conn.execution_options(isolation_level="REPEATABLE_READ")
+    if amount <= 0:
+        raise ValueError("Сумма должная быть положительной")
 
     async with db.begin():
+        await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
 
         result = await db.execute(select(User).where(User.id == from_user_id).with_for_update())
         from_user = result.scalar_one_or_none()
@@ -81,5 +126,13 @@ async def transfer_money_db(db: db_dependency, from_user_id: int, to_user_id: in
 
         from_user.balance -= amount
         to_user.balance += amount
+
+        await cache.delete(
+            f"user:{from_user_id}",
+            f"user:{to_user_id}",
+            f"user_balance:{from_user_id}",
+            f"user_balance:{to_user_id}",
+            f"users"
+        )
 
     return {"message": "Денежные средства переведены"}

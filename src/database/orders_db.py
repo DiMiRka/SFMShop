@@ -1,17 +1,22 @@
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update, text
 
 from src.models.exceptions import InsufficientStockError, BusinessLogicError
-from src.database.connection import db_dependency
+from src.database.connection import db_dependency, redis_client
 from src.database.models import Order, User, Product, OrderItem
+from src.services.cache_service import CacheService
+
+cache = CacheService(redis_client)
 
 
 async def create_order_db(db: db_dependency, user_id, product_id, quantity):
-    async with db.connection() as conn:
-        await conn.execution_options(isolation_level="REPEATABLE_READ")
+    if quantity <= 0:
+        raise ValueError("Количество должно быть положительным")
 
     async with db.begin():
-        result = db.execute(select(Product).where(Product.id == product_id).with_for_update())
+        await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+
+        result = await db.execute(select(Product).where(Product.id == product_id).with_for_update())
         product_db = result.scalar_one_or_none()
 
         if not product_db:
@@ -47,6 +52,10 @@ async def create_order_db(db: db_dependency, user_id, product_id, quantity):
         )
         db.add(order_item)
 
+    await cache.delete_products(product_id)
+    await cache.delete_users(order.user_id)
+    await cache.delete_orders(order.user_id)
+
     return {
         "order_id": order.id,
         "user_id": user_db.id,
@@ -57,11 +66,32 @@ async def create_order_db(db: db_dependency, user_id, product_id, quantity):
 
 
 async def delete_order_db(db: db_dependency, order_id):
-    result = db.execute(select(Order).where(Order.id == order_id))
-    order = result.scalar_one_or_none()
 
-    if not order:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
-    await db.delete(order)
+    async with db.begin():
+
+        result = await db.execute(select(Order).where(Order.id == order_id))
+        order = result.scalar_one_or_none()
+
+        if not order:
+            raise HTTPException(status_code=404, detail="Заказ не найден")
+
+        await db.delete(order)
+        await db.execute(update(User).where(User.id == order.user_id).values(balance=User.balance + order.total))
+
+        result = await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))
+        items = result.scalars().all()
+
+        for item in items:
+            await db.execute(
+                update(Product)
+                .where(Product.id == item.product_id)
+                .values(quantity=Product.quantity + item.quantity)
+            )
+
+        product_ids = [item.product_id for item in items]
+
+    await cache.delete_products(product_ids)
+    await cache.delete_users(order.user_id)
+    await cache.delete_orders(order.user_id)
 
     return {"id": order_id, "message": "Заказ удален"}

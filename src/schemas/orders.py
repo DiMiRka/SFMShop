@@ -17,7 +17,7 @@ class OrderCreate(Base):
 
 
 class OrderItemResponse(OrderItemBase):
-    price: Decimal
+    total: Decimal
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -27,6 +27,6 @@ class OrderResponse(Base):
     user_id: int
     total: Decimal
     created_at: datetime
-    items: List[OrderItemBase]
+    items: List[OrderItemResponse]
 
     model_config = ConfigDict(from_attributes=True)

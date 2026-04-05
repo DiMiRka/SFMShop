@@ -1,13 +1,20 @@
-from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ, ISOLATION_LEVEL_SERIALIZABLE
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.orm import selectinload
 from datetime import datetime
 
-from src.database.connection import db_dependency
+from src.database.connection import db_dependency, redis_client
 from src.database.models import Order, OrderItem, User, Product
+from src.schemas import ProductResponse
+from src.services.cache_service import CacheService
+
+cache = CacheService(redis_client)
 
 
 async def get_orders_with_products(db: db_dependency, user_id: int):
+
+    if (result := await cache.get(f"user_orders_products:{user_id}")) is not None:
+        return result
+
     result = await db.execute(
         select(Order)
         .options(selectinload(Order.items).selectinload(OrderItem.product))
@@ -16,20 +23,25 @@ async def get_orders_with_products(db: db_dependency, user_id: int):
 
     orders = result.scalars().all()
 
-    data = []
-    for order in orders:
-        for item in order.items:
-            data.append({
-                "order_id": order.id,
-                "product": item.product.name,
-                "quantity": item.quantity,
-                "price": item.price,
-            })
+    data = [
+        {"order_id": order.id,
+         "product": item.product.name,
+         "quantity": item.quantity,
+         "price": item.price}
+        for order in orders
+        for item in order.items
+    ]
+
+    await cache.set(f"user_orders_products:{user_id}", data)
 
     return data
 
 
 async def get_orders_count_by_users(db: db_dependency):
+
+    if (result := await cache.get("orders_count_by_users")) is not None:
+        return result
+
     orders_count = func.count(Order.id)
 
     result = await db.execute(
@@ -37,18 +49,40 @@ async def get_orders_count_by_users(db: db_dependency):
         .outerjoin(Order)
         .group_by(User.id, User.name)
         .order_by(orders_count.desc())
-    )
+    ).all()
 
-    return result.all()
+    data = [
+        {"user_id": r.id, "name": r.name, "orders_count": r.orders_count}
+        for r in result
+    ]
+
+    await cache.set("orders_count_by_users", data)
+
+    return data
 
 
 async def get_products_sorted_by_price(db: db_dependency):
-    result = await db.execute(select(Product).order_by(Product.price.desc()))
 
-    return result.scalars().all()
+    if (result := await cache.get("products_sorted_by_price")) is not None:
+        return result
+
+    result = await db.execute(select(Product).order_by(Product.price.desc())).scalars().all()
+
+    data = [
+        ProductResponse.model_validate(p).model_dump(mode="json")
+        for p in result
+    ]
+
+    await cache.set("products_sorted_by_price", data)
+
+    return data
 
 
 async def get_user_order_history(db: db_dependency, user_id):
+
+    if (result := await cache.get(f"user_order_history:{user_id}")) is not None:
+        return result
+
     result = await db.execute(
         select(
             Order.id.label("order_id"),
@@ -65,14 +99,27 @@ async def get_user_order_history(db: db_dependency, user_id):
 
     orders = result.all()
 
-    print("История заказов пользователя:")
-    for order in orders:
-        print(order)
-    print("------------")
-    return orders
+    data = [
+        {
+            "order_id": row.order_id,
+            "created_at": row.created_at.isoformat(),
+            "product_name": row.product_name,
+            "product_price": float(row.product_price),
+            "quantity": row.order_quantity
+        }
+        for row in orders
+    ]
+
+    await cache.set(f"user_order_history:{user_id}", data)
+
+    return data
 
 
 async def get_order_statistics(db: db_dependency):
+
+    if (result := await cache.get("order_statistics")) is not None:
+        return result
+
     order_count = func.count(Order.id)
     total_amount = func.coalesce(func.sum(Order.total), 0)
 
@@ -90,15 +137,26 @@ async def get_order_statistics(db: db_dependency):
 
     orders = result.all()
 
-    print("Статистика заказов пользователей")
-    for row in orders:
-        print(row)
-    print("------------")
+    data = [
+        {
+            "user_id": row.id,
+            "name": row.name,
+            "order_count": row.order_count,
+            "total_amount": float(row.total_amount),
+        }
+        for row in orders
+    ]
 
-    return orders
+    await cache.set("order_statistics", data)
+
+    return data
 
 
 async def get_top_products(db: db_dependency, limit=5):
+
+    if (result := await cache.get(f"top_products:{limit}")) is not None:
+        return result
+
     total_sold = func.coalesce(func.sum(OrderItem.quantity), 0)
 
     result = await db.execute(
@@ -115,19 +173,28 @@ async def get_top_products(db: db_dependency, limit=5):
 
     products = result.all()
 
-    print("Популярные товары:")
-    for row in products:
-        print(row)
-    print("------------")
+    data = [
+        {
+            "id": row.id,
+            "name": row.name,
+            "total_sold": row.total_sold
+        }
+        for row in products
+    ]
 
-    return products
+    await cache.set(f"top_products:{limit}", data)
+
+    return data
 
 
 async def generate_sales_report(db: db_dependency, start_date: datetime):
-    async with db.connection() as conn:
-        await conn.execution_options(isolation_level="REPEATABLE_READ")
+
+    if (result := await cache.get(f"sales_report:{start_date}")) is not None:
+        return result
 
     async with db.begin():
+        await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+
         result = await db.execute(
             select(func.coalesce(func.sum(Order.total), 0))
             .where(Order.created_at >= start_date)
@@ -141,17 +208,24 @@ async def generate_sales_report(db: db_dependency, start_date: datetime):
         )
         count = result.scalar()
 
-    return {
+    response = {
         "total": total,
         "count": count,
     }
 
+    await cache.set(f"sales_report:{start_date}", response)
+
+    return response
+
 
 async def calculate_total_revenue(db: db_dependency, start_date, end_date):
-    async with db.connection() as conn:
-        await conn.execution_options(isolation_level="REPEATABLE_READ")
+
+    if (result := await cache.get(f"total_revenue:{start_date}:{end_date}")) is not None:
+        return result
 
     async with db.begin():
+        await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+
         result = await db.execute(
             select(
                 func.coalesce(func.sum(Order.total), 0),
@@ -162,43 +236,12 @@ async def calculate_total_revenue(db: db_dependency, start_date, end_date):
 
     total, count = result.one()
 
-    return {
+    response = {
         "total": total,
         "count": count,
         "average": float(total) / count if count else None
     }
 
+    await cache.set(f"total_revenue:{start_date}:{end_date}", response)
 
-def create_order_old(conn, user_id, product_id, quantity, total):
-    cur = conn.cursor()
-
-    cur.execute("INSERT INTO orders (user_id, total) VALUES (%s, %s)", (user_id, total))
-    cur.execute("UPDATE products SET quantity = quantity - %s WHERE id = %s", (quantity, product_id))
-
-    conn.commit()
-    conn.close()
-
-
-def create_order_improved(conn, user_id, product_id, quantity, total):
-    conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
-            balance = cur.fetchone()[0]
-            if balance < total:
-                raise ValueError("Недостаточно средств")
-
-            cur.execute("INSERT INTO orders (user_id, total) VALUES (%s, %s)", (user_id, total))
-            cur.execute("UPDATE products SET quantity = quantity - %s WHERE id = %s", (quantity, product_id))
-
-            cur.execute("SELECT quantity FROM products WHERE id = %s", (product_id,))
-            new_quantity = cur.fetchone()[0]
-            if new_quantity < 0:
-                raise ValueError("Количество товара стало отрицательным")
-
-            conn.commit()
-
-    except Exception as e:
-        conn.rollback()
-        raise
+    return response
