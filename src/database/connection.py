@@ -1,5 +1,6 @@
 import os
 import redis
+from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from typing import Union, Annotated, AsyncGenerator
 from fastapi import Depends
@@ -38,3 +39,5 @@ async_session = create_sessionmaker(engine)
 db_dependency = Annotated[AsyncSession, Depends(get_async_session)]
 
 redis_client = redis.asyncio.Redis(host=os.getenv('REDIS_HOST'), port=int(os.getenv('REDIS_PORT')), db=int(os.getenv('REDIS_DB')), decode_responses=True)
+
+mongo_client = AsyncIOMotorClient(os.getenv('MONGO_URI'))
