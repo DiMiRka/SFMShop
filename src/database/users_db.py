@@ -1,7 +1,7 @@
 from sqlalchemy import select, text
 from fastapi import HTTPException
 
-from src.database.connection import db_dependency, redis_client
+from src.database.connection import write_db_dependency, read_db_dependency, redis_client
 from src.database.models import User, Order
 from src.schemas import UserResponse, OrderResponse
 from src.models.exceptions import BusinessLogicError
@@ -10,7 +10,7 @@ from src.services.cache_service import CacheService
 cache = CacheService(redis_client)
 
 
-async def create_user_db(db: db_dependency, name, email, age, balance):
+async def create_user_db(db: write_db_dependency, name, email, age, balance):
     user = User(name=name, email=email, age=age, balance=balance)
     db.add(user)
 
@@ -19,7 +19,7 @@ async def create_user_db(db: db_dependency, name, email, age, balance):
     return {"message": "Пользователь создан"}
 
 
-async def get_users_db(db: db_dependency):
+async def get_users_db(db: read_db_dependency):
     if (cached := await cache.get("users")) is not None:
         return cached
 
@@ -36,7 +36,7 @@ async def get_users_db(db: db_dependency):
     return users_data
 
 
-async def get_user_by_id_db(db: db_dependency, user_id):
+async def get_user_by_id_db(db: read_db_dependency, user_id):
 
     if (cached := await cache.get(f"user:{user_id}")) is not None:
         return cached
@@ -54,7 +54,7 @@ async def get_user_by_id_db(db: db_dependency, user_id):
     return user_data
 
 
-async def get_user_balance_db(db: db_dependency, user_id):
+async def get_user_balance_db(db: read_db_dependency, user_id):
 
     if (cached := await cache.get(f"user_balance:{user_id}")) is not None:
         return cached
@@ -70,7 +70,7 @@ async def get_user_balance_db(db: db_dependency, user_id):
     return balance
 
 
-async def get_user_email_db(db: db_dependency, user_id):
+async def get_user_email_db(db: read_db_dependency, user_id):
 
     if (cached := await cache.get(f"user_email:{user_id}")) is not None:
         return cached
@@ -86,7 +86,7 @@ async def get_user_email_db(db: db_dependency, user_id):
     return email
 
 
-async def get_user_orders_db(db: db_dependency, user_id: int):
+async def get_user_orders_db(db: read_db_dependency, user_id: int):
 
     if (cached := await cache.get(f"user_orders:{user_id}")) is not None:
         return cached
@@ -104,7 +104,7 @@ async def get_user_orders_db(db: db_dependency, user_id: int):
     return orders_data
 
 
-async def transfer_money_db(db: db_dependency, from_user_id: int, to_user_id: int, amount: int):
+async def transfer_money_db(db: write_db_dependency, from_user_id: int, to_user_id: int, amount: int):
     if amount <= 0:
         raise ValueError("Сумма должная быть положительной")
 

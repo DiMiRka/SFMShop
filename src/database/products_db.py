@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy import select, func
 
-from src.database.connection import db_dependency, redis_client
+from src.database.connection import write_db_dependency, read_db_dependency, redis_client
 from src.database.models import Product
 from src.models import Product
 from src.schemas import ProductCreate, ProductUpdate, ProductResponse
@@ -10,7 +10,7 @@ from src.services.cache_service import CacheService
 cache = CacheService(redis_client)
 
 
-async def get_product_db(db: db_dependency, product_id: int):
+async def get_product_db(db: read_db_dependency, product_id: int):
 
     if (result := await cache.get(f"product:{product_id}")) is not None:
         return result
@@ -28,7 +28,7 @@ async def get_product_db(db: db_dependency, product_id: int):
     return product_data
 
 
-async def add_product_db(db: db_dependency, product: ProductCreate):
+async def add_product_db(db: write_db_dependency, product: ProductCreate):
     product_db = Product(**product.model_dump(mode="json"))
     db.add(product_db)
     await db.flush()
@@ -38,7 +38,7 @@ async def add_product_db(db: db_dependency, product: ProductCreate):
     return {"id": product_db.id, "message": "Товар добавлен"}
 
 
-async def get_all_products_db(db: db_dependency, limit: int, offset: int):
+async def get_all_products_db(db: read_db_dependency, limit: int, offset: int):
 
     if (result := await cache.get(f"products:{limit}:{offset}")) is not None:
         return result
@@ -66,7 +66,7 @@ async def get_all_products_db(db: db_dependency, limit: int, offset: int):
     return response
 
 
-async def update_product_db(db: db_dependency, product_id, product: ProductUpdate):
+async def update_product_db(db: write_db_dependency, product_id, product: ProductUpdate):
     result = await db.execute(select(Product).where(Product.id == product_id))
     product_db = result.scalar_one_or_none()
 
@@ -83,7 +83,7 @@ async def update_product_db(db: db_dependency, product_id, product: ProductUpdat
     return {"id": product_id, "message": "Товар обновлен"}
 
 
-async def delete_product_db(db: db_dependency, product_id):
+async def delete_product_db(db: write_db_dependency, product_id):
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
 

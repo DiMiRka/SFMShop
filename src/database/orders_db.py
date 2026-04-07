@@ -2,14 +2,14 @@ from fastapi import HTTPException
 from sqlalchemy import select, update, text
 
 from src.models.exceptions import InsufficientStockError, BusinessLogicError
-from src.database.connection import db_dependency, redis_client
+from src.database.connection import write_db_dependency, redis_client
 from src.database.models import Order, User, Product, OrderItem
 from src.services.cache_service import CacheService
 
 cache = CacheService(redis_client)
 
 
-async def create_order_db(db: db_dependency, user_id, product_id, quantity):
+async def create_order_db(db: write_db_dependency, user_id, product_id, quantity):
     if quantity <= 0:
         raise ValueError("Количество должно быть положительным")
 
@@ -65,7 +65,7 @@ async def create_order_db(db: db_dependency, user_id, product_id, quantity):
     }
 
 
-async def delete_order_db(db: db_dependency, order_id):
+async def delete_order_db(db: write_db_dependency, order_id):
 
     async with db.begin():
 

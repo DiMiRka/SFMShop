@@ -2,7 +2,7 @@ from sqlalchemy import select, func, text
 from sqlalchemy.orm import selectinload
 from datetime import datetime
 
-from src.database.connection import db_dependency, redis_client
+from src.database.connection import read_db_dependency, redis_client
 from src.database.models import Order, OrderItem, User, Product
 from src.schemas import ProductResponse
 from src.services.cache_service import CacheService
@@ -10,7 +10,7 @@ from src.services.cache_service import CacheService
 cache = CacheService(redis_client)
 
 
-async def get_orders_with_products(db: db_dependency, user_id: int):
+async def get_orders_with_products(db: read_db_dependency, user_id: int):
 
     if (result := await cache.get(f"user_orders_products:{user_id}")) is not None:
         return result
@@ -37,7 +37,7 @@ async def get_orders_with_products(db: db_dependency, user_id: int):
     return data
 
 
-async def get_orders_count_by_users(db: db_dependency):
+async def get_orders_count_by_users(db: read_db_dependency):
 
     if (result := await cache.get("orders_count_by_users")) is not None:
         return result
@@ -61,7 +61,7 @@ async def get_orders_count_by_users(db: db_dependency):
     return data
 
 
-async def get_products_sorted_by_price(db: db_dependency):
+async def get_products_sorted_by_price(db: read_db_dependency):
 
     if (result := await cache.get("products_sorted_by_price")) is not None:
         return result
@@ -78,7 +78,7 @@ async def get_products_sorted_by_price(db: db_dependency):
     return data
 
 
-async def get_user_order_history(db: db_dependency, user_id):
+async def get_user_order_history(db: read_db_dependency, user_id):
 
     if (result := await cache.get(f"user_order_history:{user_id}")) is not None:
         return result
@@ -115,7 +115,7 @@ async def get_user_order_history(db: db_dependency, user_id):
     return data
 
 
-async def get_order_statistics(db: db_dependency):
+async def get_order_statistics(db: read_db_dependency):
 
     if (result := await cache.get("order_statistics")) is not None:
         return result
@@ -152,7 +152,7 @@ async def get_order_statistics(db: db_dependency):
     return data
 
 
-async def get_top_products(db: db_dependency, limit=5):
+async def get_top_products(db: read_db_dependency, limit=5):
 
     if (result := await cache.get(f"top_products:{limit}")) is not None:
         return result
@@ -187,7 +187,7 @@ async def get_top_products(db: db_dependency, limit=5):
     return data
 
 
-async def generate_sales_report(db: db_dependency, start_date: datetime):
+async def generate_sales_report(db: read_db_dependency, start_date: datetime):
 
     if (result := await cache.get(f"sales_report:{start_date}")) is not None:
         return result
@@ -218,7 +218,7 @@ async def generate_sales_report(db: db_dependency, start_date: datetime):
     return response
 
 
-async def calculate_total_revenue(db: db_dependency, start_date, end_date):
+async def calculate_total_revenue(db: read_db_dependency, start_date, end_date):
 
     if (result := await cache.get(f"total_revenue:{start_date}:{end_date}")) is not None:
         return result
