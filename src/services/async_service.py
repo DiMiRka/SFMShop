@@ -3,37 +3,25 @@ import aiohttp
 import time
 
 
-async def fetch_url_async(url: str):
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    return await response.json()
-                else:
-                    return None
-    except Exception as e:
-        print(f"Ошибка при запросе к {url}: {e}")
-        return None
+async def process_order(order_id: int):
+    await asyncio.sleep(0.1)
+
+    return f"Заказ {order_id} обработан"
 
 
-async def fetch_multiple_urls_async(urls: list):
-    tasks = [fetch_url_async(url) for url in urls]
+async def process_orders_async(order_ids: list):
+    tasks = [process_order(order_id) for order_id in order_ids]
     results = await asyncio.gather(*tasks)
     return results
 
 
 async def main():
-    urls = [
-        "https://api.example.com/data1",
-        "https://api.example.com/data2",
-        "https://api.example.com/data3"
-    ]
+    order_ids = list(range(1, 101))
 
     start = time.time()
-    results = await fetch_multiple_urls_async(urls)
+    results = await process_orders_async(order_ids)
     end = time.time()
-    print(f"Параллельные запросы выполнены за {end - start} секунд")
-    print(f"Результат: {results}")
+    print(f"Параллельные запросы выполнены за {end - start:.4f} секунд")
 
 if __name__ == "__main__":
     asyncio.run(main())

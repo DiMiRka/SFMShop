@@ -3,7 +3,6 @@ from sqlalchemy import select, func
 
 from src.database.connection import write_db_dependency, read_db_dependency, redis_client
 from src.database.models import Product
-from src.models import Product
 from src.schemas import ProductCreate, ProductUpdate, ProductResponse
 from src.services.cache_service import CacheService
 
@@ -39,31 +38,34 @@ async def add_product_db(db: write_db_dependency, product: ProductCreate):
 
 
 async def get_all_products_db(db: read_db_dependency, limit: int, offset: int):
+    try:
+        if (result := await cache.get(f"products:{limit}:{offset}")) is not None:
+            return result
 
-    if (result := await cache.get(f"products:{limit}:{offset}")) is not None:
-        return result
+        result = await db.execute(select(Product).offset(offset).limit(limit))
+        products = result.scalars().all()
 
-    result = await db.execute(select(Product).offset(offset).limit(limit))
-    products = result.scalars().all()
+        result = await db.execute(select(func.count()).select_from(Product))
+        total = result.scalar()
 
-    result = await db.execute(select(func.count()).select_from(Product))
-    total = result.scalar()
+        products_data = [
+            ProductResponse.model_validate(product).model_dump(mode="json")
+            for product in products
+        ]
 
-    products_data = [
-        ProductResponse.model_validate(product).model_dump(mode="json")
-        for product in products
-    ]
+        response = {
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "products": products_data,
+        }
 
-    response = {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "products": products_data,
-    }
+        await cache.set(f"products:{limit}:{offset}", response)
 
-    await cache.set(f"products:{limit}:{offset}", response)
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при получении товаров: {e}")
 
-    return response
 
 
 async def update_product_db(db: write_db_dependency, product_id, product: ProductUpdate):

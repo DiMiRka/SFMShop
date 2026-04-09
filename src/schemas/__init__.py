@@ -1,7 +1,7 @@
 from src.schemas.base import Base
 from src.schemas.products import ProductCreate, ProductUpdate, ProductResponse
 from src.schemas.users import UserCreate, UserResponse
-from src.schemas.orders import OrderCreate, OrderResponse
+from src.schemas.orders import OrderCreate, OrderResponse, OrderItemBase
 
 __all__ = [
     'Base',
@@ -12,4 +12,5 @@ __all__ = [
     'UserResponse',
     'OrderCreate',
     'OrderResponse',
+    'OrderItemBase',
 ]

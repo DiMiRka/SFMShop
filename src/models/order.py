@@ -7,7 +7,7 @@ from src.models.user import User
 from src.models.exceptions import InvalidOrderError
 from src.models.mixins import LoggableMixin, SerializableMixin
 from src.models.metaclasses import ModelMeta
-from src.services.order_service import OrderCalculator, OrderValidator
+#from src.services.order_service import OrderCalculator, OrderValidator
 
 
 @dataclass

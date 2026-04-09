@@ -3,16 +3,16 @@ from fastapi import HTTPException
 
 from src.database.connection import write_db_dependency, read_db_dependency, redis_client
 from src.database.models import User, Order
-from src.schemas import UserResponse, OrderResponse
+from src.schemas import UserResponse, OrderResponse, UserCreate
 from src.models.exceptions import BusinessLogicError
 from src.services.cache_service import CacheService
 
 cache = CacheService(redis_client)
 
 
-async def create_user_db(db: write_db_dependency, name, email, age, balance):
-    user = User(name=name, email=email, age=age, balance=balance)
-    db.add(user)
+async def create_user_db(db: write_db_dependency, user: UserCreate):
+    user_db = User(**user.model_dump(mode="json"))
+    db.add(user_db)
 
     await cache.delete("users")
 

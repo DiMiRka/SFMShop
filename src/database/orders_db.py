@@ -5,11 +5,16 @@ from src.models.exceptions import InsufficientStockError, BusinessLogicError
 from src.database.connection import write_db_dependency, redis_client
 from src.database.models import Order, User, Product, OrderItem
 from src.services.cache_service import CacheService
+from src.schemas import OrderCreate
 
 cache = CacheService(redis_client)
 
 
-async def create_order_db(db: write_db_dependency, user_id, product_id, quantity):
+async def create_order_db(db: write_db_dependency, order: OrderCreate):
+    quantity = order.items[0].quantity
+    product_id = order.items[0].product_id
+    user_id = order.user_id
+
     if quantity <= 0:
         raise ValueError("Количество должно быть положительным")
 
