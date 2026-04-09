@@ -10,7 +10,6 @@ cache = CacheService(redis_client)
 
 
 async def get_product_db(db: read_db_dependency, product_id: int):
-
     if (result := await cache.get(f"product:{product_id}")) is not None:
         return result
 
@@ -65,7 +64,6 @@ async def get_all_products_db(db: read_db_dependency, limit: int, offset: int):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при получении товаров: {e}")
-
 
 
 async def update_product_db(db: write_db_dependency, product_id, product: ProductUpdate):
