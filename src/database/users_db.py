@@ -1,5 +1,7 @@
 from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
+from loguru import logger
 
 from src.database.connection import write_db_dependency, read_db_dependency, redis_client
 from src.database.models import User, Order
@@ -14,94 +16,88 @@ async def create_user_db(db: write_db_dependency, user: UserCreate):
     user_db = User(**user.model_dump(mode="json"))
     db.add(user_db)
 
+    await db.flush()
+
     await cache.delete("users")
 
-    return {"message": "Пользователь создан"}
+    return {"message": f"Пользователь создан id={user_db.id}"}
 
 
 async def get_users_db(db: read_db_dependency):
-    if (cached := await cache.get("users")) is not None:
-        return cached
 
-    results = await db.execute(select(User))
-    users = results.scalars().all()
+    async def fetch():
 
-    users_data = [
-        UserResponse.model_validate(user).model_dump(mode="json")
-        for user in users
-    ]
+        results = await db.execute(select(User))
+        users = results.scalars().all()
 
-    await cache.set("users", users_data)
+        users_data = [
+            UserResponse.model_validate(user).model_dump(mode="json")
+            for user in users
+        ]
 
-    return users_data
+        return users_data
+
+    return await cache.get_or_set_cache("users", fetch)
 
 
 async def get_user_by_id_db(db: read_db_dependency, user_id):
+    async def fetch():
+        results = await db.execute(select(User).where(User.id == user_id))
+        user = results.scalar_one_or_none()
 
-    if (cached := await cache.get(f"user:{user_id}")) is not None:
-        return cached
+        if not user:
+            logger.warning(f"User id={user_id} not found")
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    results = await db.execute(select(User).where(User.id == user_id))
-    user = results.scalar_one_or_none()
+        return UserResponse.model_validate(user).model_dump(mode="json")
 
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-
-    user_data = UserResponse.model_validate(user).model_dump(mode="json")
-
-    await cache.set(f"user:{user_id}", user_data)
-
-    return user_data
+    return await cache.get_or_set_cache(f"user:{user_id}", fetch)
 
 
 async def get_user_balance_db(db: read_db_dependency, user_id):
 
-    if (cached := await cache.get(f"user_balance:{user_id}")) is not None:
-        return cached
+    async def fetch():
+        result = await db.execute(select(User.balance).where(User.id == user_id))
+        balance = result.scalar_one_or_none()
 
-    result = await db.execute(select(User.balance).where(User.id == user_id))
-    balance = result.scalar_one_or_none()
+        if balance is None:
+            logger.warning(f"User id={user_id} not found")
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    if balance is None:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        return balance
 
-    await cache.set(f"user_balance:{user_id}", balance)
-
-    return balance
+    return await cache.get_or_set_cache(f"user_balance:{user_id}", fetch)
 
 
 async def get_user_email_db(db: read_db_dependency, user_id):
 
-    if (cached := await cache.get(f"user_email:{user_id}")) is not None:
-        return cached
+    async def fetch():
+        result = await db.execute(select(User.email).where(User.id == user_id))
+        email = result.scalar_one_or_none()
 
-    result = await db.execute(select(User.email).where(User.id == user_id))
-    email = result.scalar_one_or_none()
+        if email is None:
+            logger.warning(f"User id={user_id} not found")
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    if email is None:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        return email
 
-    await cache.set(f"user_email:{user_id}", email)
-
-    return email
+    return await cache.get_or_set_cache(f"user_email:{user_id}", fetch)
 
 
 async def get_user_orders_db(db: read_db_dependency, user_id: int):
 
-    if (cached := await cache.get(f"user_orders:{user_id}")) is not None:
-        return cached
+    async def fetch():
+        result = await db.execute(select(Order).options(selectinload(Order.items)).where(Order.user_id == user_id))
+        orders = result.scalars().all()
 
-    result = await db.execute(select(Order).where(Order.user_id == user_id))
-    orders = result.scalars().all()
+        orders_data = [
+            OrderResponse.model_validate(order).model_dump(mode="json")
+            for order in orders
+        ]
 
-    orders_data = [
-        OrderResponse.model_validate(order).model_dump(mode="json")
-        for order in orders
-    ]
+        return orders_data
 
-    await cache.set(f"user_orders:{user_id}", orders_data)
-
-    return orders_data
+    return await cache.get_or_set_cache(f"user_orders:{user_id}", fetch)
 
 
 async def transfer_money_db(db: write_db_dependency, from_user_id: int, to_user_id: int, amount: int):
@@ -114,6 +110,7 @@ async def transfer_money_db(db: write_db_dependency, from_user_id: int, to_user_
         result = await db.execute(select(User).where(User.id == from_user_id).with_for_update())
         from_user = result.scalar_one_or_none()
         if from_user is None:
+            logger.warning(f"User id={from_user_id} not found")
             raise HTTPException(status_code=404, detail="Отправитель не найден")
 
         if from_user.balance < amount:
@@ -122,17 +119,18 @@ async def transfer_money_db(db: write_db_dependency, from_user_id: int, to_user_
         result = await db.execute(select(User).where(User.id == to_user_id).with_for_update())
         to_user = result.scalar_one_or_none()
         if to_user is None:
+            logger.warning(f"User id={to_user_id} not found")
             raise HTTPException(status_code=404, detail="Получатель не найден")
 
         from_user.balance -= amount
         to_user.balance += amount
 
-        await cache.delete(
-            f"user:{from_user_id}",
-            f"user:{to_user_id}",
-            f"user_balance:{from_user_id}",
-            f"user_balance:{to_user_id}",
-            f"users"
-        )
+    await cache.delete(
+        f"user:{from_user_id}",
+        f"user:{to_user_id}",
+        f"user_balance:{from_user_id}",
+        f"user_balance:{to_user_id}",
+        f"users"
+    )
 
     return {"message": "Денежные средства переведены"}

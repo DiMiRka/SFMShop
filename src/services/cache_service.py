@@ -1,7 +1,8 @@
 from redis.asyncio import Redis
 from datetime import datetime
-import json
+import orjson
 from typing import Any
+from loguru import logger
 
 
 class CacheService:
@@ -12,19 +13,37 @@ class CacheService:
         data = await self.redis.get(key)
 
         if data:
-            return json.loads(data)
+            return orjson.loads(data)
         return None
 
     async def set(self, key: str, data: Any, ttl: int = 900):
-        await self.redis.setex(key, ttl, json.dumps(data))
+        data_bytes = orjson.dumps(data)
+        await self.redis.setex(key, ttl, data_bytes)
+
+    async def get_or_set_cache(self, key: str, func):
+        if (cached := await self.get(key)) is not None:
+            logger.debug("Данные получены из кэша")
+            return cached
+
+        logger.debug("Запрос данных к БД")
+        result = await func()
+        await self.set(key, result)
+        return result
 
     async def delete(self, *keys: str):
         if keys:
             await self.redis.delete(*keys)
 
     async def delete_many(self, pattern: str, batch_size: int = 100):
+        keys = []
         async for key in self.redis.scan_iter(pattern, count=batch_size):
-            await self.delete(key)
+            keys.append(key.decode())
+            if len(keys) >= batch_size:
+                await self.redis.delete(*keys)
+                keys.clear()
+
+        if keys:
+            await self.redis.delete(*keys)
 
     async def delete_products(self, product_ids: int | list[int] | None = None):
         await self.delete_many("products:*")
