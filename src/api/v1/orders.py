@@ -1,15 +1,17 @@
 from fastapi import APIRouter, HTTPException, status
 from loguru import logger
+from typing import List
 
 from src.database import (write_db_dependency, read_db_dependency, get_all_orders_db,
                           get_order_by_id_db, create_order_db, delete_order_db)
-from src.schemas import OrderCreate
+from src.schemas import OrderCreate, OrderResponse
 
 
 orders_router = APIRouter(prefix="/orders", tags=['orders'])
 
 
-@orders_router.get("/", status_code=status.HTTP_200_OK)
+@orders_router.get("/", summary="Получить все заказы",
+                   response_model=List[OrderResponse], status_code=status.HTTP_200_OK)
 async def get_orders(db: read_db_dependency, limit: int = 100, offset: int = 0):
     logger.info(f"get orders limit={limit}, offset={offset}")
     try:

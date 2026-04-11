@@ -63,10 +63,14 @@ async def update_user_db(db: write_db_dependency, user_id: int, user: UserUpdate
         logger.warning(f"Product id={user_id} not found")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
 
-    updated_user = user.model_dump(mode="json")
+    print(user_db)
+    updated_user = user.model_dump(exclude_unset=True)
+    print(updated_user)
 
     for field, value in updated_user.items():
         setattr(user_db, field, value)
+
+    await db.flush()
 
     await cache.delete_users(user_id)
 

@@ -20,10 +20,27 @@ async def get_all_orders_db(db: read_db_dependency, limit: int, offset: int):
         result = await db.execute(select(Order).options(selectinload(Order.items)).offset(offset).limit(limit))
         orders = result.scalars().all()
 
-        orders_data = [
-            OrderResponse.model_validate(order).model_dump(mode="json")
-            for order in orders
-        ]
+        if not orders:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказов нет")
+
+        orders_data = []
+
+        for order in orders:
+            orders_data.append({
+                "id": order.id,
+                "user_id": order.user_id,
+                "total": float(order.total),
+                "created_at": order.created_at,
+                "items": [
+                    {
+                        "id": item.id,
+                        "product_id": item.product_id,
+                        "quantity": item.quantity,
+                        "total": float(item.total)
+                    }
+                    for item in order.items
+                ]
+            })
 
         return orders_data
 

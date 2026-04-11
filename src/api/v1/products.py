@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends, Response
 from loguru import logger
+from typing import Optional
 
+from src.services.authorization_service import authorization_user
 from src.schemas import ProductCreate, ProductUpdate
 from src.database import (read_db_dependency, write_db_dependency, get_all_products_db, get_product_db,
                           create_product_db, update_product_db, delete_product_db)
@@ -9,9 +11,13 @@ from src.database import (read_db_dependency, write_db_dependency, get_all_produ
 products_router = APIRouter(prefix="/products", tags=['products'])
 
 
-@products_router.get("/", status_code=status.HTTP_200_OK)
-async def get_products(db: read_db_dependency, limit: int = 100, offset: int = 0):
+@products_router.get("/", summary="Получить все товары", status_code=status.HTTP_200_OK)
+async def get_products(db: read_db_dependency, response: Response, _: None = Depends(authorization_user),
+                       limit: int = 100, offset: int = 0):
+
     logger.info(f"get products limit={limit}, offset={offset}")
+    response.headers["Cache-Control"] = "max-age=600"
+
     try:
         return await get_all_products_db(db, limit, offset)
     except HTTPException:
