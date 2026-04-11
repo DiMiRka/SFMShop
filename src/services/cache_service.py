@@ -20,15 +20,21 @@ class CacheService:
         data_bytes = orjson.dumps(data)
         await self.redis.setex(key, ttl, data_bytes)
 
-    async def get_or_set_cache(self, key: str, func):
+    async def get_or_set_cache(self, key: str, func, ttl: int = 900):
         if (cached := await self.get(key)) is not None:
             logger.debug("Данные получены из кэша")
             return cached
 
         logger.debug("Запрос данных к БД")
         result = await func()
-        await self.set(key, result)
+        await self.set(key, result, ttl)
         return result
+
+    async def get_count(self, key: str):
+        data = await self.redis.incr(key)
+        if data:
+            return data
+        return None
 
     async def delete(self, *keys: str):
         if keys:

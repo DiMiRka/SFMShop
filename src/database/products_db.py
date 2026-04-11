@@ -93,3 +93,5 @@ async def delete_product_db(db: write_db_dependency, product_id):
     await cache.delete_products(product_id)
 
     return {"id": product_id, "message": "Товар удален"}
+
+
