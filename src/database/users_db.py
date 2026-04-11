@@ -1,26 +1,15 @@
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from loguru import logger
 
 from src.database.connection import write_db_dependency, read_db_dependency, redis_client
-from src.database.models import User, Order
-from src.schemas import UserResponse, OrderResponse, UserCreate
+from src.database.models import User, Order, OrderItem
+from src.schemas import UserResponse, OrderResponse, UserCreate, UserUpdate
 from src.models.exceptions import BusinessLogicError
 from src.services.cache_service import CacheService
 
 cache = CacheService(redis_client)
-
-
-async def create_user_db(db: write_db_dependency, user: UserCreate):
-    user_db = User(**user.model_dump(mode="json"))
-    db.add(user_db)
-
-    await db.flush()
-
-    await cache.delete("users")
-
-    return {"message": f"Пользователь создан id={user_db.id}"}
 
 
 async def get_users_db(db: read_db_dependency):
@@ -47,11 +36,70 @@ async def get_user_by_id_db(db: read_db_dependency, user_id):
 
         if not user:
             logger.warning(f"User id={user_id} not found")
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
 
         return UserResponse.model_validate(user).model_dump(mode="json")
 
     return await cache.get_or_set_cache(f"user:{user_id}", fetch)
+
+
+async def create_user_db(db: write_db_dependency, user: UserCreate):
+    user_db = User(**user.model_dump(mode="json"))
+    db.add(user_db)
+
+    await db.flush()
+
+    await cache.delete("users")
+
+    return {"message": f"Пользователь создан id={user_db.id}"}
+
+
+async def update_user_db(db: write_db_dependency, user_id: int, user: UserUpdate):
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user_db = result.scalar_one_or_none()
+
+    if not user_db:
+        logger.warning(f"Product id={user_id} not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+    updated_user = user.model_dump(mode="json")
+
+    for field, value in updated_user.items():
+        setattr(user_db, field, value)
+
+    await cache.delete_users(user_id)
+
+    return {"id": user_id, "message": "Пользователь обновлен"}
+
+
+async def delete_user_db(db: write_db_dependency, user_id: int):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user_db = result.scalar_one_or_none()
+
+    if not user_db:
+        logger.warning(f"User id={user_id} not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+    result = await db.execute(
+        select(Order.id).where(Order.user_id == user_id)
+    )
+    order_ids = result.scalars().all()
+
+    result = await db.execute(
+        select(OrderItem.product_id)
+        .join(Order, OrderItem.order_id == Order.id)
+        .where(Order.user_id == user_id)
+    )
+    product_ids = result.scalars().all()
+
+    await db.delete(user_db)
+
+    await cache.delete_orders(user_id, order_ids)
+    await cache.delete_products(product_ids)
+    await cache.delete_users(user_id)
+
+    return {"id": user_id, "message": " Пользователь удален"}
 
 
 async def get_user_balance_db(db: read_db_dependency, user_id):
@@ -62,7 +110,7 @@ async def get_user_balance_db(db: read_db_dependency, user_id):
 
         if balance is None:
             logger.warning(f"User id={user_id} not found")
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
 
         return balance
 
@@ -77,7 +125,7 @@ async def get_user_email_db(db: read_db_dependency, user_id):
 
         if email is None:
             logger.warning(f"User id={user_id} not found")
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
 
         return email
 
@@ -111,7 +159,7 @@ async def transfer_money_db(db: write_db_dependency, from_user_id: int, to_user_
         from_user = result.scalar_one_or_none()
         if from_user is None:
             logger.warning(f"User id={from_user_id} not found")
-            raise HTTPException(status_code=404, detail="Отправитель не найден")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Отправитель не найден")
 
         if from_user.balance < amount:
             raise BusinessLogicError("Недостаточно средств на балансе")
@@ -120,7 +168,7 @@ async def transfer_money_db(db: write_db_dependency, from_user_id: int, to_user_
         to_user = result.scalar_one_or_none()
         if to_user is None:
             logger.warning(f"User id={to_user_id} not found")
-            raise HTTPException(status_code=404, detail="Получатель не найден")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Получатель не найден")
 
         from_user.balance -= amount
         to_user.balance += amount

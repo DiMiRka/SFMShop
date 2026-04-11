@@ -8,6 +8,8 @@ from loguru import logger
 
 from src.database.connection import mongo_client
 
+_is_logging_configured = False
+
 
 def setup_logging():
     global _is_logging_configured

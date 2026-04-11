@@ -43,7 +43,7 @@ class CacheService:
     async def delete_many(self, pattern: str, batch_size: int = 100):
         keys = []
         async for key in self.redis.scan_iter(pattern, count=batch_size):
-            keys.append(key.decode())
+            keys.append(key)
             if len(keys) >= batch_size:
                 await self.redis.delete(*keys)
                 keys.clear()
@@ -55,33 +55,49 @@ class CacheService:
         await self.delete_many("products:*")
         await self.delete("products_sorted_by_price")
 
-        if product_ids:
+        if product_ids is not None:
             if isinstance(product_ids, int):
                 product_ids = [product_ids]
 
             await self.delete(*[f"product:{pid}" for pid in product_ids])
 
-    async def delete_users(self, user_id):
+    async def delete_users(self, user_ids: int | list[int] | None = None):
+        await self.delete_many("users*")
 
-        await self.delete(
-            f"user:{user_id}",
-            f"user_balance:{user_id}",
-            f"user_email:{user_id}",
-            "users"
-        )
+        if user_ids is not None:
+            if isinstance(user_ids, int):
+                user_ids = [user_ids]
 
-    async def delete_orders(self, user_id):
+            await self.delete(
+                *[f"user:{user_id}" for user_id in user_ids],
+                *[f"user_balance:{user_id}" for user_id in user_ids],
+                *[f"user_email:{user_id}" for user_id in user_ids]
+            )
+
+    async def delete_orders(self, user_ids: int | list[int] | None = None, order_ids: int | list[int] | None = None):
         await self.delete_many("top_products:*")
         await self.delete_many("total_revenue:*")
         await self.delete_many("sales_report:*")
+        await self.delete_many("orders:*")
 
         await self.delete(
-            f"user_orders_products:{user_id}",
-            f"user_order_history:{user_id}",
-            f"user_orders:{user_id}",
             "orders_count_by_users",
             "order_statistics"
         )
+
+        if user_ids is not None:
+            if isinstance(user_ids, int):
+                user_ids = [user_ids]
+
+            await self.delete(*[f"user_orders_products:{user_id}" for user_id in user_ids],
+                              *[f"user_order_history:{user_id}" for user_id in user_ids],
+                              *[f"user_orders:{user_id}" for user_id in user_ids])
+
+        if order_ids is not None:
+            if isinstance(order_ids, int):
+                order_ids = [order_ids]
+
+            await self.delete(*[f"order:{order_id}" for order_id in order_ids])
 
     async def create_user_session(self, user_id, session_token):
         session_key = f"session:{session_token}"

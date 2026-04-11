@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy import select, func
 from loguru import logger
 
@@ -8,31 +8,6 @@ from src.schemas import ProductCreate, ProductUpdate, ProductResponse
 from src.services.cache_service import CacheService
 
 cache = CacheService(redis_client)
-
-
-async def get_product_db(db: read_db_dependency, product_id: int):
-
-    async def fetch():
-        result = await db.execute(select(Product).where(Product.id == product_id))
-        product = result.scalar_one_or_none()
-
-        if not product:
-            logger.warning(f"Product id={product_id} not found")
-            raise HTTPException(status_code=404, detail="Товар не найден")
-
-        return ProductResponse.model_validate(product).model_dump(mode="json")
-
-    return await cache.get_or_set_cache(f"product:{product_id}", fetch)
-
-
-async def create_product_db(db: write_db_dependency, product: ProductCreate):
-    product_db = Product(**product.model_dump(mode="json"))
-    db.add(product_db)
-    await db.flush()
-
-    await cache.delete_products()
-
-    return {"id": product_db.id, "message": "Товар добавлен"}
 
 
 async def get_all_products_db(db: read_db_dependency, limit: int, offset: int):
@@ -61,14 +36,39 @@ async def get_all_products_db(db: read_db_dependency, limit: int, offset: int):
     return await cache.get_or_set_cache(f"products:{limit}:{offset}", fetch)
 
 
-async def update_product_db(db: write_db_dependency, product_id, product: ProductUpdate):
+async def get_product_db(db: read_db_dependency, product_id: int):
+
+    async def fetch():
+        result = await db.execute(select(Product).where(Product.id == product_id))
+        product = result.scalar_one_or_none()
+
+        if not product:
+            logger.warning(f"Product id={product_id} not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+
+        return ProductResponse.model_validate(product).model_dump(mode="json")
+
+    return await cache.get_or_set_cache(f"product:{product_id}", fetch)
+
+
+async def create_product_db(db: write_db_dependency, product: ProductCreate):
+    product_db = Product(**product.model_dump(mode="json"))
+    db.add(product_db)
+    await db.flush()
+
+    await cache.delete_products()
+
+    return {"id": product_db.id, "message": "Товар добавлен"}
+
+
+async def update_product_db(db: write_db_dependency, product_id: int, product: ProductUpdate):
 
     result = await db.execute(select(Product).where(Product.id == product_id))
     product_db = result.scalar_one_or_none()
 
     if not product_db:
         logger.warning(f"Product id={product_id} not found")
-        raise HTTPException(status_code=404, detail="Товар не найден")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
 
     updated_product = product.model_dump(mode="json")
 
@@ -86,7 +86,7 @@ async def delete_product_db(db: write_db_dependency, product_id):
 
     if not product:
         logger.warning(f"Product id={product_id} not found")
-        raise HTTPException(status_code=404, detail="Товар не найден")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
 
     await db.delete(product)
 
