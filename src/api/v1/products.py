@@ -27,7 +27,7 @@ async def get_products(db: read_db_dependency, response: Response, _: None = Dep
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка при получении товаров: {e}")
 
 
-@products_router.get("/{product_id}", status_code=status.HTTP_200_OK)
+@products_router.get("/{product_id}", summary="Получить товар", status_code=status.HTTP_200_OK)
 async def get_product(db: read_db_dependency, product_id: int):
     logger.info(f"get product id={product_id}")
     try:
@@ -39,7 +39,7 @@ async def get_product(db: read_db_dependency, product_id: int):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ошибка при получении товара")
 
 
-@products_router.post("/", status_code=status.HTTP_201_CREATED)
+@products_router.post("/", summary="Создать новый товар", status_code=status.HTTP_201_CREATED)
 async def post_product(db: write_db_dependency, product: ProductCreate):
     logger.info(f"create product")
     try:
@@ -49,7 +49,7 @@ async def post_product(db: write_db_dependency, product: ProductCreate):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка при создании товара: {e}")
 
 
-@products_router.put("/{product_id}", status_code=status.HTTP_200_OK)
+@products_router.put("/{product_id}", summary="Обновить товар", status_code=status.HTTP_200_OK)
 async def put_product(db: write_db_dependency, product_id: int, product: ProductUpdate):
     logger.info(f"update product id={product_id}")
     try:
@@ -61,7 +61,7 @@ async def put_product(db: write_db_dependency, product_id: int, product: Product
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка при обновлении товара: {e}")
 
 
-@products_router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@products_router.delete("/{product_id}", summary="Удалить товар", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_product(db: write_db_dependency, product_id: int):
     logger.info(f"delete product id={product_id}")
     try:

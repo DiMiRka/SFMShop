@@ -23,7 +23,7 @@ async def get_orders(db: read_db_dependency, limit: int = 100, offset: int = 0):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка при получении товаров: {e}")
 
 
-@orders_router.get("/{order_id}", status_code=status.HTTP_200_OK)
+@orders_router.get("/{order_id}", summary="Получить заказ", status_code=status.HTTP_200_OK)
 async def get_order(db: read_db_dependency, order_id: int):
     logger.info(f"get order id={order_id}")
     try:
@@ -35,7 +35,7 @@ async def get_order(db: read_db_dependency, order_id: int):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ошибка при получении товара")
 
 
-@orders_router.post("/", status_code=status.HTTP_201_CREATED)
+@orders_router.post("/", summary="Создать новый заказ", status_code=status.HTTP_201_CREATED)
 async def post_order(db: write_db_dependency, order: OrderCreate):
     logger.info(f"create new order")
     try:
@@ -47,7 +47,7 @@ async def post_order(db: write_db_dependency, order: OrderCreate):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка при создании заказа: {e}")
 
 
-@orders_router.delete("/", status_code=status.HTTP_204_NO_CONTENT)
+@orders_router.delete("/", summary="Удалить заказ", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_order(db: write_db_dependency, order_id: int):
     logger.info(f"delete order id={order_id}")
     try:
