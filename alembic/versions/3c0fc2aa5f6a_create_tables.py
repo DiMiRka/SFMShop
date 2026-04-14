@@ -1,8 +1,8 @@
 """create tables
 
-Revision ID: 57e849c008eb
+Revision ID: 3c0fc2aa5f6a
 Revises: 
-Create Date: 2026-04-09 20:00:27.165253
+Create Date: 2026-04-14 20:03:34.066087
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '57e849c008eb'
+revision: str = '3c0fc2aa5f6a'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -26,18 +26,19 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=20), nullable=False),
     sa.Column('price', sa.DECIMAL(precision=10, scale=2), nullable=False),
     sa.Column('quantity', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_products_id'), 'products', ['id'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('name', sa.String(length=20), nullable=False),
+    sa.Column('hashed_password', sa.String(length=20), server_default='password', nullable=False),
     sa.Column('email', sa.String(length=20), nullable=False),
     sa.Column('age', sa.Integer(), nullable=False),
-    sa.Column('balance', sa.Integer(), nullable=False),
+    sa.Column('balance', sa.DECIMAL(precision=10, scale=2), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
@@ -46,7 +47,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('total', sa.DECIMAL(precision=10, scale=2), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], onupdate='CASCADE', ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -57,7 +58,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('text', sa.Text(), nullable=False),
     sa.Column('rating', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], onupdate='CASCADE', ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], onupdate='CASCADE', ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')

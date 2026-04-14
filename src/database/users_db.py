@@ -1,15 +1,43 @@
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
 
 from src.database.connection import write_db_dependency, read_db_dependency, redis_client
 from src.database.models import User, Order, OrderItem
-from src.schemas import UserResponse, OrderResponse, UserCreate, UserUpdate
+from src.schemas import UserResponse, OrderResponse, UserCreate, UserInDB, UserUpdate
 from src.models.exceptions import BusinessLogicError
 from src.services.cache_service import CacheService
+from src.core.security import (get_password_hash, verify_password, create_access_token,
+                               create_refresh_token, decode_token)
 
 cache = CacheService(redis_client)
+
+
+async def create_user_db(db: write_db_dependency, user: UserCreate):
+    results = await db.execute(select(User).where(User.email == user.email))
+    user = results.scalar_one_or_none()
+
+    if user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email уже зарегистрирован"
+        )
+
+    hashed_password = await get_password_hash(user.password)
+    new_user = UserInDB(
+        name=user.name,
+        email=user.email,
+        age=user.age,
+        hashed_password=hashed_password
+    )
+    new_user_db = User(**new_user.model_dump(mode="json"))
+
+    db.add(new_user_db)
+    await db.flush()
+
+    return {"message": "Пользователь создан", "user": {new_user_db}}
 
 
 async def get_users_db(db: read_db_dependency):
@@ -29,7 +57,7 @@ async def get_users_db(db: read_db_dependency):
     return await cache.get_or_set_cache("users", fetch)
 
 
-async def get_user_by_id_db(db: read_db_dependency, user_id):
+async def get_user_by_id_db(db: read_db_dependency, user_id: int):
     async def fetch():
         results = await db.execute(select(User).where(User.id == user_id))
         user = results.scalar_one_or_none()
@@ -43,15 +71,60 @@ async def get_user_by_id_db(db: read_db_dependency, user_id):
     return await cache.get_or_set_cache(f"user:{user_id}", fetch)
 
 
-async def create_user_db(db: write_db_dependency, user: UserCreate):
-    user_db = User(**user.model_dump(mode="json"))
-    db.add(user_db)
+async def get_authorized_user(db: read_db_dependency, form_data: OAuth2PasswordRequestForm):
+    results = await db.execute(select(User).where(User.email == form_data.username))
+    user = results.scalar_one_or_none()
 
-    await db.flush()
+    if not user or not await verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Не верный email или пароль",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    await cache.delete("users")
+    access_token = await create_access_token(data={"sub": str(user.id)})
+    refresh_token = await create_refresh_token(data={"sub": str(user.id)})
 
-    return {"message": f"Пользователь создан id={user_db.id}"}
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
+
+
+async def create_access_token_db(db: read_db_dependency, refresh_token: str):
+    payload = await decode_token(refresh_token)
+
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный refresh token"
+        )
+
+    user_id = payload.get("sub")
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный refresh token"
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден"
+        )
+
+    new_access_token = await create_access_token(data={"sub": str(user.id)})
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
 
 
 async def update_user_db(db: write_db_dependency, user_id: int, user: UserUpdate):
@@ -63,9 +136,7 @@ async def update_user_db(db: write_db_dependency, user_id: int, user: UserUpdate
         logger.warning(f"Product id={user_id} not found")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
 
-    print(user_db)
     updated_user = user.model_dump(exclude_unset=True)
-    print(updated_user)
 
     for field, value in updated_user.items():
         setattr(user_db, field, value)

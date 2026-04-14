@@ -5,14 +5,23 @@ from typing import Optional
 from src.schemas.base import Base
 
 
-class UserCreate(Base):
+class User(Base):
     name: str = Field(..., min_length=1, max_length=20)
     email: EmailStr
     age: int = Field(..., ge=18)
 
 
+class UserCreate(User):
+    password: str
+
+
+class UserInDB(User):
+    hashed_password: str
+
+
 class UserUpdate(Base):
     name: Optional[str] = Field(None, min_length=1, max_length=20)
+    password: Optional[str] = Field(None, min_length=1, max_length=20)
     email: Optional[EmailStr] = None
     age: Optional[int] = Field(None, ge=18)
     balance: Optional[int] = Field(None, ge=0)

@@ -1,13 +1,11 @@
-import os
 import redis
 from motor.motor_asyncio import AsyncIOMotorClient
-from dotenv import load_dotenv
 from typing import Union, Annotated, AsyncGenerator
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import (async_sessionmaker, create_async_engine,
                                     AsyncSession, AsyncEngine, AsyncConnection)
 
-load_dotenv()
+from src.core.config import app_settings
 
 
 async def get_write_session() -> AsyncGenerator[AsyncSession, None]:
@@ -38,13 +36,9 @@ def create_sessionmaker(
     )
 
 
-engine = create_async_engine(
-    f"postgresql+asyncpg://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@"
-    f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}")
+engine = create_async_engine(app_settings.postgres_url)
 
-engine_replica = create_async_engine(
-    f"postgresql+asyncpg://{os.getenv('DB_REPLICA_USER')}:{os.getenv('DB_REPLICA_PASSWORD')}@"
-    f"{os.getenv('DB_REPLICA_HOST')}:{os.getenv('DB_REPLICA_PORT')}/{os.getenv('DB_REPLICA_NAME')}")
+engine_replica = create_async_engine(app_settings.postgres_replica_url)
 
 async_session = create_sessionmaker(engine)
 async_session_replica = create_sessionmaker(engine_replica)
@@ -52,7 +46,6 @@ async_session_replica = create_sessionmaker(engine_replica)
 write_db_dependency = Annotated[AsyncSession, Depends(get_write_session)]
 read_db_dependency = Annotated[AsyncSession, Depends(get_read_session)]
 
-redis_client = redis.asyncio.Redis(host=os.getenv('REDIS_HOST'), port=int(os.getenv('REDIS_PORT')),
-                                   db=int(os.getenv('REDIS_DB')), decode_responses=True)
+redis_client = redis.asyncio.Redis.from_url(app_settings.redis_url)
 
-mongo_client = AsyncIOMotorClient(os.getenv('MONGO_URI'))
+mongo_client = AsyncIOMotorClient(app_settings.mongo_url)

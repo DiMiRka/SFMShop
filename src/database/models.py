@@ -14,9 +14,10 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(20), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(Text, nullable=False, server_default='password')
     email: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
     age: Mapped[int] = mapped_column(Integer, CheckConstraint("age >= 18", name="check_user_age"), nullable=False)
-    balance: Mapped[DECIMAL] = mapped_column(DECIMAL(10, 2))
+    balance: Mapped[DECIMAL] = mapped_column(DECIMAL(10, 2), default=0.0)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
