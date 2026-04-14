@@ -1,14 +1,16 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 import uvicorn
 import time
 from loguru import logger
 
 from src.api.v1 import v1_router
+from src.core.config import app_settings
 from src.services.log_service import setup_logging
-
-setup_logging()
-
 
 app = FastAPI(
     title="SFMShop API",
@@ -17,6 +19,22 @@ app = FastAPI(
 )
 
 app.include_router(v1_router)
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=app_settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")

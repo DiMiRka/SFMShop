@@ -1,4 +1,4 @@
-from pydantic import EmailStr, Field, ConfigDict
+from pydantic import EmailStr, Field, ConfigDict, field_validator
 from datetime import datetime
 from typing import Optional
 
@@ -12,7 +12,20 @@ class User(Base):
 
 
 class UserCreate(User):
-    password: str
+    password: str = Field(..., min_length=8, max_length=20)
+
+    @classmethod
+    @field_validator('password')
+    def validate_password(cls, v: str) -> str:
+        if not any(c.isdigit() for c in v):
+            raise ValueError(
+                "Пароль должен содержать хотя бы одну цифру"
+            )
+        if not any(c.isalpha() for c in v):
+            raise ValueError(
+                "Пароль должен содержать хотя бы одну букву"
+            )
+        return v
 
 
 class UserInDB(User):

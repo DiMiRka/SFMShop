@@ -1,4 +1,5 @@
-from pydantic import ConfigDict
+import html
+from pydantic import ConfigDict, Field, field_validator
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -7,9 +8,9 @@ from src.schemas.base import Base
 
 
 class ProductBase(Base):
-    name: str
-    price: Decimal
-    quantity: int = 0
+    name: str = Field(..., min_length=1, max_length=200)
+    price: Decimal = Field(..., max_digits=10, decimal_places=2)
+    quantity: int = Field(1, ge=1, le=100)
 
 
 class ProductCreate(ProductBase):

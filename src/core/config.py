@@ -13,11 +13,17 @@ class AppSettings(BaseSettings):
     app_host: str = 'localhost'
     reload: bool = True
     cpu_count: int | None = None
+
     mongo_url: str = os.getenv('MONGO_URL')
+
     algorithm: str = 'HS256'
-    secret_key: str = os.getenv('SECRET_KEY')
+    jwt_secret: str = os.getenv('JWT_SECRET')
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+
+    cors_origins: list[str] = os.getenv("CORS_ORIGINS").split(",")
+
+    rate_limit_login = os.getenv('RATE_LIMIT_LOGIN')
 
     @property
     def postgres_url(self) -> str:
@@ -47,3 +53,5 @@ uvicorn_options = {
     "workers": app_settings.cpu_count or multiprocessing.cpu_count(),
     "reload": app_settings.reload,
 }
+
+
