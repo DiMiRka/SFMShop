@@ -1,7 +1,7 @@
 from src.schemas.base import Base
 from src.schemas.products import ProductCreate, ProductUpdate, ProductResponse
-from src.schemas.users import UserCreate, UserInDB, UserResponse, UserUpdate
-from src.schemas.orders import OrderCreate, OrderResponse, OrderItemBase
+from src.schemas.users import UserCreate, UserInDB, UserResponse, UserUpdatePatch
+from src.schemas.orders import OrderCreate, OrderResponse, OrderItemBase, OrderInDB
 from src.schemas.token import Token, TokenData
 
 __all__ = [
@@ -11,11 +11,12 @@ __all__ = [
     'ProductResponse',
     'UserCreate',
     'UserInDB',
-    'UserUpdate',
+    'UserUpdatePatch',
     'UserResponse',
     'OrderCreate',
     'OrderResponse',
     'OrderItemBase',
+    'OrderInDB',
     'Token',
     'TokenData',
 ]

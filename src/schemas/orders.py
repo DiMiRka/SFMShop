@@ -7,13 +7,19 @@ from src.schemas.base import Base
 
 
 class OrderItemBase(Base):
+    order_id: int
     product_id: int
     quantity: int
+    total: Decimal
 
 
 class OrderCreate(Base):
     user_id: int
     items: List[OrderItemBase]
+
+
+class OrderInDB(OrderCreate):
+    total: Decimal
 
 
 class OrderItemResponse(OrderItemBase):

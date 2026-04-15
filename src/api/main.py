@@ -1,15 +1,15 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 import uvicorn
 import time
 from loguru import logger
 
 from src.api.v1 import v1_router
 from src.core.config import app_settings
+from src.core.limiter import limiter
 from src.services.log_service import setup_logging
 
 app = FastAPI(
@@ -19,14 +19,6 @@ app = FastAPI(
 )
 
 app.include_router(v1_router)
-
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(
-    RateLimitExceeded,
-    _rate_limit_exceeded_handler,
-)
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -60,6 +52,11 @@ async def log_requests(request: Request, call_next):
 
     return response
 
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 
 if __name__ == "__main__":
     setup_logging()

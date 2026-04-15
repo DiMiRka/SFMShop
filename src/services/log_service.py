@@ -1,12 +1,7 @@
 import sys
-import os
-import asyncio
-from datetime import datetime, timedelta
-from motor.motor_asyncio import AsyncIOMotorCollection
 import logging
 from loguru import logger
 
-from src.database.connection import mongo_client
 
 _is_logging_configured = False
 
@@ -53,16 +48,6 @@ def setup_logging():
         backtrace=True,
         diagnose=False
     )
-
-    # logging.basicConfig(
-    #     handlers=[InterceptHandler()],
-    #     level=logging.INFO,
-    #     force=True
-    # )
-    #
-    # for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-    #     logging.getLogger(name).handlers = [InterceptHandler()]
-    #     logging.getLogger(name).propagate = False
 
     _is_logging_configured = True
 

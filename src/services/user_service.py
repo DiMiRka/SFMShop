@@ -1,73 +1,192 @@
-from abc import ABC, abstractmethod
+from fastapi import HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from loguru import logger
+import redis.asyncio as redis
 
-from src.models import User
-from src.services.discount_service import DiscountStrategy
-
-
-class UserValidation:
-    @staticmethod
-    def validate(user: User) -> bool:
-        if not user.name:
-            raise ValueError("Имя не может быть пустым")
-        if "@" not in user.email:
-            raise ValueError("Email должен содержать @")
-        if user.age < 18:
-            raise ValueError("Пользователь должен быть старше 18 лет")
-        if user.balance < 0:
-            raise ValueError("Баланс не может быть отрицательным")
-        return True
-
-
-class UserCalculator:
-    @staticmethod
-    def calculate_total(user: User) -> float:
-        total = 0
-        for order in user.orders:
-            total += order.total
-        return total
-
-    @staticmethod
-    def apply_discount(user: User, discount: DiscountStrategy):
-        total = UserCalculator.calculate_total(user)
-        return discount.apply(total)
-
-
-class NotificationService(ABC):
-    @abstractmethod
-    def send(self, user: User, message: str):
-        pass
-
-
-class EmailNotificationService(NotificationService):
-    def send(self, user: User, message: str):
-        print(f"Отправка email на {user.email}: {message}")
-
-
-class Database(ABC):
-    @abstractmethod
-    def save(self, user: User):
-        pass
-
-
-class PostgresqlDatabase(Database):
-    def save(self, user: User):
-        print(f"Сохранение пользователя {user.id} в PostgreSQL")
+from src.repositories import UserRepository, OrderRepository
+from src.services.cache_service import CacheService
+from src.schemas import UserCreate, UserInDB, UserUpdatePatch, UserResponse, OrderResponse
+from src.core.security import (get_password_hash, verify_password, create_access_token,
+                               create_refresh_token, decode_token)
 
 
 class UserService:
-    def __init__(self, notification_service: NotificationService, database: Database):
-        self.notification_service = notification_service
-        self.database = database
+    def __init__(
+            self,
+            user_rep: UserRepository,
+            order_rep: OrderRepository,
+            client: redis.Redis):
+        self.user_rep = user_rep
+        self.order_rep = order_rep
+        self.cache = CacheService(client)
 
-    def register_user(self, user: User):
-        UserValidation.validate(user)
-        self.notification_service.send(user, f"Добро пожаловать, {user.name}!")
-        self.database.save(user)
+    async def get_users(self, limit: int, offset: int):
+        async def fetch():
+            users = await self.user_rep.get_all(limit=limit, offset=offset)
 
-    @staticmethod
-    def generate_user_report(user: User):
-        report = f"Пользователь: {user.name}\n"
-        report += f"Email: {user.email}\n"
-        report += f"Всего заказов: {len(user.orders)}\n"
-        report += f"Потрачено: {UserCalculator.calculate_total(user)}\n"
-        return report
+            users_data = [
+                UserResponse.model_validate(user).model_dump(mode="json")
+                for user in users
+            ]
+
+            return users_data
+
+        return await self.cache.get_or_set_cache(f"users:{limit}:{offset}", fetch)
+
+    async def get_user_by_id(self, user_id: int):
+        async def fetch():
+            user = await self.user_rep.get_by_id(user_id)
+
+            if not user:
+                logger.warning(f"User id={user_id} not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+            return UserResponse.model_validate(user).model_dump(mode="json")
+
+        return await self.cache.get_or_set_cache(f"user:{user_id}", fetch)
+
+    async def register_user(self, user: UserCreate):
+        user_db = await self.user_rep.get_by_email(str(user.email))
+
+        if user_db:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email уже зарегистрирован"
+            )
+
+        hashed_password = await get_password_hash(user.password)
+        new_user = UserInDB(
+            name=user.name,
+            email=user.email,
+            age=user.age,
+            hashed_password=hashed_password
+        )
+        new_user_db = await self.user_rep.create(new_user.model_dump(mode="json"))
+
+        return {
+            "message": "Пользователь создан",
+            "user": UserResponse.model_validate(new_user_db).model_dump(mode="json")
+        }
+
+    async def authorized_user(self, form_data: OAuth2PasswordRequestForm):
+        user = await self.user_rep.get_by_email(form_data.username)
+
+        if not user or not await verify_password(form_data.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Не верный email или пароль",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        access_token = await create_access_token(data={"sub": str(user.id)})
+        refresh_token = await create_refresh_token(data={"sub": str(user.id)})
+
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer"
+        }
+
+    async def create_access_token_db(self, refresh_token: str):
+        payload = await decode_token(refresh_token)
+
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Неверный refresh token"
+            )
+
+        user_id = payload.get("sub")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Неверный refresh token"
+            )
+
+        user = await self.user_rep.get_by_id(user_id)
+
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Пользователь не найден"
+            )
+
+        new_access_token = await create_access_token(data={"sub": str(user.id)})
+
+        return {
+            "access_token": new_access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer"
+        }
+
+    async def update_user(self, user_id: int, user_update: UserUpdatePatch):
+        user_db = await self.user_rep.get_by_id(user_id)
+
+        if not user_db:
+            logger.warning(f"Product id={user_id} not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+        data = user_update.model_dump(exclude_unset=True)
+
+        await self.user_rep.update(user_db, data)
+
+        await self.cache.delete_users(user_id)
+
+        return {"id": user_id, "message": "Товар обновлен"}
+
+    async def delete_user(self, user_id: int):
+        async with self.user_rep.db.begin():
+            user_db = await self.user_rep.get_by_id_for_update(user_id)
+
+            if not user_db:
+                logger.warning(f"User id={user_id} not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+            order_ids = await self.order_rep.get_order_ids_by_user(user_id)
+            product_ids = await self.order_rep.get_product_ids_by_user(user_id)
+
+            await self.user_rep.delete(user_db)
+
+        await self.cache.delete_orders(user_id, order_ids)
+        await self.cache.delete_products(product_ids)
+        await self.cache.delete_users(user_id)
+
+        return {"id": user_id, "message": " Пользователь удален"}
+
+    async def get_user_balance(self, user_id: int) -> int:
+        async def fetch():
+            balance = await self.user_rep.get_balance(user_id)
+
+            if balance is None:
+                logger.warning(f"User id={user_id} not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+            return balance
+
+        return await self.cache.get_or_set_cache(f"user_balance:{user_id}", fetch)
+
+    async def get_user_email(self, user_id):
+        async def fetch():
+            email = await self.user_rep.get_email(user_id)
+
+            if email is None:
+                logger.warning(f"User id={user_id} not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+            return email
+
+        return await self.cache.get_or_set_cache(f"user_email:{user_id}", fetch)
+
+    async def get_user_orders(self, user_id: int):
+        async def fetch():
+            orders = await self.order_rep.get_user_orders(user_id)
+
+            orders_data = [
+                OrderResponse.model_validate(order).model_dump(mode="json")
+                for order in orders
+            ]
+
+            return orders_data
+
+        return await self.cache.get_or_set_cache(f"user_orders:{user_id}", fetch)

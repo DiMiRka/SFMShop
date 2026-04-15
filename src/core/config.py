@@ -1,8 +1,6 @@
 import multiprocessing
 import os
 from dotenv import load_dotenv
-from pydantic import PostgresDsn, RedisDsn
-from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
@@ -21,9 +19,9 @@ class AppSettings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
-    cors_origins: list[str] = os.getenv("CORS_ORIGINS").split(",")
+    cors_origins: list[str] = os.getenv("CORS_ORIGINS")
 
-    rate_limit_login = os.getenv('RATE_LIMIT_LOGIN')
+    rate_limit_login: str = os.getenv('RATE_LIMIT_LOGIN')
 
     @property
     def postgres_url(self) -> str:

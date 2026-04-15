@@ -1,138 +1,177 @@
-from abc import ABC, abstractmethod
+import asyncio
+from fastapi import HTTPException, status
+from loguru import logger
+import redis.asyncio as redis
 
-from src.models.exceptions import InvalidOrderError
-from src.schemas import OrderCreate
-from src.services.product_service import ProductCalculator
-from src.services.discount_service import DiscountStrategy
-from src.database import get_user_balance_db, get_user_email_db, create_order_db
+from src.repositories import OrderRepository, UserRepository, ProductRepository
+from src.services.cache_service import CacheService
+from src.database.models import Order
+from src.schemas import OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate, OrderInDB, OrderItemBase
+from src.models.exceptions import InsufficientStockError, BusinessLogicError
 
 
-# class OrderCalculator:
-#     @staticmethod
-#     def calculate_total(order: Order) -> float:
-#         return sum([ProductCalculator.calculate_total(product) for product in order.products])
-#
-#     @staticmethod
-#     def apply_discount(order: Order, discount: DiscountStrategy) -> float:
-#         total = OrderCalculator.calculate_total(order)
-#         return discount.apply(total)
-#
-#
-# class OrderValidator:
-#     @staticmethod
-#     def validate(order: Order):
-#         if not order.user:
-#             raise InvalidOrderError("Пользователь не существует")
-#         if not order.products:
-#             raise InvalidOrderError("Заказ невалиден: пустой список товаров")
-#
-#
-# class NotificationService(ABC):
-#     @abstractmethod
-#     def send(self, order: Order):
-#         pass
-#
-#
-# class Database(ABC):
-#     @abstractmethod
-#     def save(self, order: Order):
-#         pass
-#
-#
-# class OrderService:
-#     def __init__(self, notification_service: NotificationService, database: Database):
-#         self.notification_service = notification_service
-#         self.database = database
-#
-#     async def process_order(self, order: Order, discount: DiscountStrategy = None):
-#         OrderValidator.validate(order)
-#         total = OrderCalculator.calculate_total(order)
-#         if discount:
-#             total = OrderCalculator.apply_discount(order, discount)
-#         self.notification_service.send(order)
-#         self.database.save(order)
-#         return total
-#
-#
-# async def validate_order_data(order_data):
-#     if not order_data.get("user_id"):
-#         raise ValueError("Нет user_id")
-#     if not order_data.get("items"):
-#         raise ValueError("Нет товаров")
-#     if len(order_data.get("items", [])) == 0:
-#         raise ValueError("Список товаров пуст")
-#
-#     for item in order_data["items"]:
-#         if not item.get("price"):
-#             raise ValueError("Нет цены товара")
-#         if not item.get("quantity"):
-#             raise ValueError("Нет количества")
-#         if item["price"] < 0:
-#             raise ValueError("Цена не может быть отрицательной")
-#         if item["quantity"] <= 0:
-#             raise ValueError("Количество должно быть положительным")
-#
-#
-# async def calculate_order_total(items):
-#     total = 0
-#     for item in items:
-#         total += item["price"] * item["quantity"]
-#     return total
-#
-#
-# async def calculate_discount(total):
-#     if total > 10000:
-#         return 0.15
-#     elif total > 5000:
-#         return 0.10
-#     elif total > 1000:
-#         return 0.05
-#     return 0
-#
-#
-# async def check_user_balance(conn, user_id, required_amount):
-#     user_balance = get_user_balance_db(conn, user_id)
-#     if user_balance < required_amount:
-#         raise ValueError("Недостаточно средств")
-#     return True
-#
-#
-# async def create_order(conn, user_id, product_id, total):
-#     order_id = create_order_db(conn, order=OrderCreate(db, user_id, product_id, total))
-#     return order_id
-#
-#
-# async def send_email(email, message):
-#     print(f"Отправлено сообщение на Email{email}: {message}")
-#
-#
-# async def notify_user(conn, user_id, order_id, total):
-#     user_email = get_user_email_db(conn, user_id)
-#     await send_email(user_email, f"Заказ #{order_id} оформлен на сумму {total}")
-#
-#
-# async def log_order_processing(order_id, user_id, total):
-#     print(f"Заказ {order_id} обработан: пользователь {user_id}, сумма {total}")
-#
-#
-# async def process_order(conn, order_data):
-#     await validate_order_data(order_data)
-#
-#     total = calculate_order_total(order_data["items"])
-#
-#     discount_rate = calculate_discount(total)
-#     final_total = total * (1 - discount_rate)
-#
-#     await check_user_balance(conn, order_data["user_id"], final_total)
-#
-#     order_id = create_order(conn, order_data["user_id"], order_data["items"], final_total)
-#
-#     await notify_user(conn, order_data["user_id"], order_id, final_total)
-#
-#     await log_order_processing(order_id, order_data["user_id"], final_total)
-#
-#     return {
-#         "order_id": order_id,
-#         "total": final_total,
-#         "discount": discount_rate
-#     }
+class OrderService:
+    def __init__(
+            self,
+            order_rep: OrderRepository,
+            user_rep: UserRepository,
+            product_rep: ProductRepository,
+            client: redis.Redis):
+        self.order_rep = order_rep
+        self.user_rep = user_rep
+        self.product_rep = product_rep
+        self.cache = CacheService(client)
+
+    async def get_all_orders(self, limit: int = 100, offset: int = 0) -> list[Order]:
+        async def fetch():
+
+            orders = await self.order_rep.get_all(limit, offset)
+
+            if not orders:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказов нет")
+
+            orders_data = []
+
+            for order in orders:
+                orders_data.append({
+                    "id": order.id,
+                    "user_id": order.user_id,
+                    "total": float(order.total),
+                    "created_at": order.created_at,
+                    "items": [
+                        {
+                            "id": item.id,
+                            "product_id": item.product_id,
+                            "quantity": item.quantity,
+                            "total": float(item.total)
+                        }
+                        for item in order.items
+                    ]
+                })
+
+            return orders_data
+
+        return await self.cache.get_or_set_cache(f"orders:{limit}:{offset}", fetch)
+
+    async def get_order_by_id(self, order_id: int) -> Order:
+        async def fetch():
+            order = await self.order_rep.get_by_id(order_id)
+
+            if not order:
+                logger.warning(f"Order id={order_id} not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+
+            return OrderResponse.model_validate(order).model_dump(mode="json")
+
+        return await self.cache.get_or_set_cache(f"order:{order_id}", fetch)
+
+    async def create_order(self, order: OrderCreate):
+        quantity = []
+        product_ids = []
+
+        for item in order.items:
+            item_quantity = item.quantity
+            if item_quantity <= 0:
+                logger.warning("create order: quantity must be positive.")
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail="Количество должно быть положительным")
+
+            quantity.append(item_quantity)
+            product_ids.append(item.product_id)
+
+        user_id = order.user_id
+
+        async with self.order_rep.db.begin():
+
+            user_db = await self.user_rep.get_by_id_for_update(user_id)
+
+            if not user_db:
+                logger.warning(f"User id={user_id} not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+
+            result = await self.product_rep.get_by_ids_for_update(product_ids)
+            products_db = {p.id: p for p in result}
+
+            order_items_db = []
+            total = 0
+
+            for idx, product_id in enumerate(product_ids):
+                product_db = products_db.get(product_id)
+
+                if not product_db:
+                    logger.warning(f"Product id={product_id} not found")
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+
+                if product_db.quantity < quantity[idx]:
+                    raise InsufficientStockError("Недостаточно товара на складе")
+
+                product_db.quantity -= quantity[idx]
+
+                product_total = product_db.price * quantity[idx]
+
+                total += product_total
+
+                order_items_db.append((product_db.id, quantity[idx], product_total))
+
+            if user_db.balance < total:
+                raise BusinessLogicError("Недостаточно средств на балансе пользователя")
+
+            user_db.balance -= total
+
+            order_data = OrderInDB(user_id=user_id, items=[], total=total).model_dump(exclude_unset=True)
+
+            order_db_id = await self.order_rep.create(order_data)
+
+            for item in order_items_db:
+                data = OrderItemBase(order_id=order_db_id, **item).model_dump(exclude_unset=True)
+                await self.order_rep.create_order_item(data)
+
+        task_1 = self.cache.delete_products(product_ids)
+        task_2 = self.cache.delete_users(order.user_id)
+        task_3 = self.cache.delete_orders(order.user_id)
+
+        await asyncio.gather(task_1, task_2, task_3)
+
+        return {
+            "order_id": order_db_id,
+            "user_id": user_id,
+            "products_id": product_ids,
+            "quantity": quantity,
+            "total": float(total),
+        }
+
+    async def delete_order(self, order_id):
+        async with self.order_rep.db.begin():
+            order = await self.order_rep.get_by_id_for_update(order_id)
+
+            if not order:
+                logger.warning(f"Order id={order_id} not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+
+            user_db = await self.user_rep.get_by_id_for_update(order.user_id)
+            new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)
+
+            await self.user_rep.update(user_db, new_user_data)
+
+            items = await self.order_rep.get_order_products(order_id)
+
+            product_ids = [item.product_id for item in items]
+            products = await self.product_rep.get_by_ids(product_ids)
+
+            products_db = {p.id: p for p in products}
+
+            for item in items:
+                product_db = products_db[item.product_id]
+                data = ProductUpdate(quantity=product_db.quantity + item.quantity).model_dump(exclude_unset=True)
+                await self.product_rep.update(product_db, data)
+
+            await self.order_rep.delete(order)
+
+        task_1 = self.cache.delete_products(product_ids)
+        task_2 = self.cache.delete_users(order.user_id)
+        task_3 = self.cache.delete_orders(order.user_id)
+
+        await asyncio.gather(task_1, task_2, task_3)
+
+        return {"id": order_id, "message": "Заказ удален"}
