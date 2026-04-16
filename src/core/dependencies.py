@@ -8,16 +8,19 @@ from src.database.models import User
 from src.schemas import TokenData
 from src.core.security import decode_token
 from src.repositories import ProductRepository, OrderRepository, UserRepository
-from src.services import ProductService, UserService, OrderService
+from src.services import ProductService, UserService, OrderService, ExchangeRateClient, MultiExchangeClient
 from src.database import get_write_session, get_read_session, redis_client
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
 
-
+# База данных
+# -------------------------------------------------------------------------------------
 write_db_dependency = Annotated[AsyncSession, Depends(get_write_session)]
 read_db_dependency = Annotated[AsyncSession, Depends(get_read_session)]
 
 
+# Авторизация
+# -------------------------------------------------------------------------------------
 async def get_current_user(db: read_db_dependency, token: str = Depends(oauth2_scheme)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -46,6 +49,8 @@ async def get_current_user(db: read_db_dependency, token: str = Depends(oauth2_s
 current_user = Annotated[User, Depends(get_current_user)]
 
 
+# Репозитории
+# -------------------------------------------------------------------------------------
 async def get_product_write_repository(db: write_db_dependency) -> ProductRepository:
     return ProductRepository(db)
 
@@ -79,6 +84,8 @@ u_rep_write_dependency = Annotated[UserRepository, Depends(get_user_write_reposi
 u_rep_read_dependency = Annotated[UserRepository, Depends(get_user_read_repository)]
 
 
+# Сервисы
+# -------------------------------------------------------------------------------------
 async def get_product_write_service(rep: p_rep_write_dependency) -> ProductService:
     return ProductService(rep, redis_client)
 
@@ -119,3 +126,30 @@ async def get_order_read_service(
 
 order_write_service = Annotated[OrderService, Depends(get_order_write_service)]
 order_read_service = Annotated[OrderService, Depends(get_order_read_service)]
+
+
+# Внешние клиенты
+# -------------------------------------------------------------------------------------
+async def get_exchange_client():
+    client = ExchangeRateClient()
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
+exchange_client = Annotated[ExchangeRateClient, Depends(get_exchange_client)]
+
+
+async def get_multi_exchange_client():
+    client = MultiExchangeClient([
+        "https://api.exchangerate-api.com/v4/latest",
+        "https://api.currencyapi.com/v3/latest",
+        "https://api.fixer.io/latest"
+    ])
+    try:
+        yield client
+    finally:
+        await client.close()
+
+multi_exchange_client = Annotated[MultiExchangeClient, Depends(get_multi_exchange_client)]
