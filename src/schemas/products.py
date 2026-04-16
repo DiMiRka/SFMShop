@@ -1,4 +1,3 @@
-import html
 from pydantic import ConfigDict, Field, field_validator
 from datetime import datetime
 from decimal import Decimal

@@ -9,6 +9,7 @@ load_dotenv()
 class AppSettings(BaseSettings):
     app_port: int = 8000
     app_host: str = 'localhost'
+    log_level: str = 'critical'
     reload: bool = True
     cpu_count: int | None = None
 
@@ -35,7 +36,7 @@ class AppSettings(BaseSettings):
 
     @property
     def redis_url(self) -> str:
-        return f"redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}"
+        return f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}'
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -49,7 +50,6 @@ uvicorn_options = {
     "host": app_settings.app_host,
     "port": app_settings.app_port,
     "workers": app_settings.cpu_count or multiprocessing.cpu_count(),
+    "log_level": app_settings.log_level,
     "reload": app_settings.reload,
 }
-
-

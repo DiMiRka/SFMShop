@@ -1,5 +1,4 @@
 import asyncio
-from fastapi import HTTPException, status
 from loguru import logger
 import redis.asyncio as redis
 
@@ -7,7 +6,7 @@ from src.repositories import OrderRepository, UserRepository, ProductRepository
 from src.services.cache_service import CacheService
 from src.database.models import Order
 from src.schemas import OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate, OrderInDB, OrderItemBase
-from src.models.exceptions import InsufficientStockError, BusinessLogicError
+from src.models.exceptions import InsufficientStockError, BusinessLogicError, NotFoundError, ValidationError
 
 
 class OrderService:
@@ -28,7 +27,7 @@ class OrderService:
             orders = await self.order_rep.get_all(limit, offset)
 
             if not orders:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказов нет")
+                raise NotFoundError("Заказов нет")
 
             orders_data = []
 
@@ -59,7 +58,7 @@ class OrderService:
 
             if not order:
                 logger.warning(f"Order id={order_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+                raise NotFoundError("Заказ не найден")
 
             return OrderResponse.model_validate(order).model_dump(mode="json")
 
@@ -73,8 +72,7 @@ class OrderService:
             item_quantity = item.quantity
             if item_quantity <= 0:
                 logger.warning("create order: quantity must be positive.")
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                    detail="Количество должно быть положительным")
+                raise ValidationError("Количество должно быть положительным")
 
             quantity.append(item_quantity)
             product_ids.append(item.product_id)
@@ -87,7 +85,7 @@ class OrderService:
 
             if not user_db:
                 logger.warning(f"User id={user_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+                raise NotFoundError("Пользователь не найден")
 
 
             result = await self.product_rep.get_by_ids_for_update(product_ids)
@@ -101,7 +99,7 @@ class OrderService:
 
                 if not product_db:
                     logger.warning(f"Product id={product_id} not found")
-                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+                    raise NotFoundError("Товар не найден")
 
                 if product_db.quantity < quantity[idx]:
                     raise InsufficientStockError("Недостаточно товара на складе")
@@ -147,7 +145,7 @@ class OrderService:
 
             if not order:
                 logger.warning(f"Order id={order_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+                raise NotFoundError("Заказ не найден")
 
             user_db = await self.user_rep.get_by_id_for_update(order.user_id)
             new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)

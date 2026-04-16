@@ -3,11 +3,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
 import redis.asyncio as redis
 
+from src.models.exceptions import UnauthorizedError
 from src.repositories import UserRepository, OrderRepository
 from src.services.cache_service import CacheService
 from src.schemas import UserCreate, UserInDB, UserUpdatePatch, UserResponse, OrderResponse
 from src.core.security import (get_password_hash, verify_password, create_access_token,
                                create_refresh_token, decode_token)
+from src.api.exceptions import ValidationError, NotFoundError, UnauthorizedError
 
 
 class UserService:
@@ -39,7 +41,7 @@ class UserService:
 
             if not user:
                 logger.warning(f"User id={user_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+                raise NotFoundError(f"Пользователь не найден")
 
             return UserResponse.model_validate(user).model_dump(mode="json")
 
@@ -49,12 +51,9 @@ class UserService:
         user_db = await self.user_rep.get_by_email(str(user.email))
 
         if user_db:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email уже зарегистрирован"
-            )
+            raise ValidationError("Email уже зарегистрирован")
 
-        hashed_password = await get_password_hash(user.password)
+        hashed_password = get_password_hash(user.password)
         new_user = UserInDB(
             name=user.name,
             email=user.email,
@@ -72,11 +71,7 @@ class UserService:
         user = await self.user_rep.get_by_email(form_data.username)
 
         if not user or not await verify_password(form_data.password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Не верный email или пароль",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise UnauthorizedError("Не верный email или пароль")
 
         access_token = await create_access_token(data={"sub": str(user.id)})
         refresh_token = await create_refresh_token(data={"sub": str(user.id)})
@@ -91,26 +86,17 @@ class UserService:
         payload = await decode_token(refresh_token)
 
         if payload is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Неверный refresh token"
-            )
+            raise UnauthorizedError("Неверный refresh token")
 
         user_id = payload.get("sub")
 
         if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Неверный refresh token"
-            )
+            raise UnauthorizedError("Неверный refresh token")
 
         user = await self.user_rep.get_by_id(user_id)
 
         if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Пользователь не найден"
-            )
+            raise UnauthorizedError("Пользователь не найден")
 
         new_access_token = await create_access_token(data={"sub": str(user.id)})
 
@@ -125,7 +111,7 @@ class UserService:
 
         if not user_db:
             logger.warning(f"Product id={user_id} not found")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+            raise NotFoundError("Пользователь не найден")
 
         data = user_update.model_dump(exclude_unset=True)
 
@@ -141,7 +127,7 @@ class UserService:
 
             if not user_db:
                 logger.warning(f"User id={user_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+                raise NotFoundError("Пользователь не найден")
 
             order_ids = await self.order_rep.get_order_ids_by_user(user_id)
             product_ids = await self.order_rep.get_product_ids_by_user(user_id)
@@ -160,7 +146,7 @@ class UserService:
 
             if balance is None:
                 logger.warning(f"User id={user_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+                raise NotFoundError("Пользователь не найден")
 
             return balance
 
@@ -172,7 +158,7 @@ class UserService:
 
             if email is None:
                 logger.warning(f"User id={user_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+                raise NotFoundError("Пользователь не найден")
 
             return email
 

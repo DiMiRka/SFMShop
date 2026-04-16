@@ -6,6 +6,14 @@ class ValidationError(SFMShopException):
     pass
 
 
+class NotFoundError(ValidationError):
+    pass
+
+
+class UnauthorizedError(SFMShopException):
+    pass
+
+
 class BusinessLogicError(SFMShopException):
     pass
 

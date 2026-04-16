@@ -1,10 +1,10 @@
-from fastapi import HTTPException, status
 from loguru import logger
 import redis.asyncio as redis
 
 from src.repositories.product_repository import ProductRepository
 from src.services.cache_service import CacheService
 from src.schemas import ProductResponse, ProductCreate, ProductUpdate
+from src.models.exceptions import NotFoundError
 
 
 class ProductService:
@@ -39,7 +39,7 @@ class ProductService:
 
             if not product:
                 logger.warning(f"Product id={product_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+                raise NotFoundError("Товар не найден")
 
             return ProductResponse.model_validate(product).model_dump(mode="json")
 
@@ -58,7 +58,7 @@ class ProductService:
 
         if not product_db:
             logger.warning(f"Product id={product_id} not found")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+            raise NotFoundError("Товар не найден")
 
         data = product_update.model_dump(exclude_unset=True)
 
@@ -74,7 +74,7 @@ class ProductService:
 
             if not product_db:
                 logger.warning(f"Product id={product_id} not found")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+                raise NotFoundError("Товар не найден")
 
             await self.product_rep.delete(product_db)
 
