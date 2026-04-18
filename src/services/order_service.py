@@ -173,3 +173,43 @@ class OrderService:
         await asyncio.gather(task_1, task_2, task_3)
 
         return {"id": order_id, "message": "Заказ удален"}
+
+
+# Архитектура системы с брокером сообщений для проекта SFMShop:
+#
+# 1. Producer (src/api/main.py):
+#    - При создании заказа (create_order) отправляет сообщения в брокер (RabbitMQ/Kafka)
+#    - Формирует события order_created
+#    - Передает данные: user_id, order_id, items, total
+#
+# 2. Очередь сообщений (Broker):
+#    - RabbitMQ / Kafka
+#    - Хранит задачи до обработки
+#    - Гарантирует доставку (ack/nack, durable queues)
+#    - Поддерживает retry и DLQ
+#
+# 3. Consumer (src/services/queue_consumer.py):
+#    - Подписывается на события (order_created)
+#    - Обрабатывает задачи асинхронно
+#
+#    Основные задачи:
+#    - Отправка email уведомлений пользователю
+#    - Обновление аналитики / отчетов
+#    - Интеграция с payment-service
+#    - Логирование событий
+#
+# 4. Примеры задач в очереди:
+#    - send_email(user_id, order_id)
+#    - update_sales_report(order_id, total)
+#    - notify_payment_service(order_id)
+#
+# 5. Надежность:
+#    - retry с exponential backoff
+#    - DLQ для неуспешных сообщений
+#    - подтверждение обработки (ack)
+#
+# 6. Преимущества:
+#    - разгрузка API (не блокирует запрос)
+#    - масштабируемость (несколько consumers)
+#    - отказоустойчивость (задачи не теряются)
+
