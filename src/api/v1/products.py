@@ -11,7 +11,6 @@ products_router = APIRouter(prefix="/products", tags=['products'])
 async def get_products(service: product_read_service, response: Response,
                        limit: int = 100, offset: int = 0):
 
-    response.headers["Cache-Control"] = "max-age=600"
     return await service.get_all_products(limit, offset)
 
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, BackgroundTasks
+from fastapi import APIRouter, status, BackgroundTasks, Request
 from typing import List
 
 
@@ -22,19 +22,12 @@ async def get_order(cu: current_user, service: order_read_service, order_id: int
 
 @orders_router.post("/", summary="Создать новый заказ", status_code=status.HTTP_201_CREATED)
 async def post_order(
+        request: Request,
         cu: current_user,
         service: order_write_service,
-        order: OrderCreate,
-        background_tasks: BackgroundTasks):
+        order: OrderCreate):
 
-    result = await service.create_order(order)
-
-    background_tasks.add_task(
-        send_notification(
-            EmailNotification(),
-            f"Заказ {result["order_id"]} успешно создан"
-        )
-    )
+    result = await service.create_order(order, request.app.state.queue)
 
     return result
 

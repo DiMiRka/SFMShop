@@ -1,11 +1,9 @@
-from fastapi import HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
-import redis.asyncio as redis
 
-from src.models.exceptions import UnauthorizedError
 from src.repositories import UserRepository, OrderRepository
 from src.services.cache_service import CacheService
+from src.services.queue_producer import QueueProducer
 from src.schemas import UserCreate, UserInDB, UserUpdatePatch, UserResponse, OrderResponse
 from src.core.security import (get_password_hash, verify_password, create_access_token,
                                create_refresh_token, decode_token)
@@ -17,10 +15,12 @@ class UserService:
             self,
             user_rep: UserRepository,
             order_rep: OrderRepository,
-            client: redis.Redis):
+            cache: CacheService,
+            queue: QueueProducer):
         self.user_rep = user_rep
         self.order_rep = order_rep
-        self.cache = CacheService(client)
+        self.cache = cache
+        self.queue = queue
 
     async def get_users(self, limit: int, offset: int):
         async def fetch():
@@ -62,6 +62,12 @@ class UserService:
         )
         new_user_db = await self.user_rep.create(new_user.model_dump(mode="json"))
 
+        await self.queue.publish_event(
+                "user_exchange",
+                "user.created",
+                {}
+            )
+
         return {
             "message": "Пользователь создан",
             "user": UserResponse.model_validate(new_user_db).model_dump(mode="json")
@@ -70,7 +76,7 @@ class UserService:
     async def authorized_user(self, form_data: OAuth2PasswordRequestForm):
         user = await self.user_rep.get_by_email(form_data.username)
 
-        if not user or not await verify_password(form_data.password, user.hashed_password):
+        if not user or not verify_password(form_data.password, user.hashed_password):
             raise UnauthorizedError("Не верный email или пароль")
 
         access_token = await create_access_token(data={"sub": str(user.id)})
@@ -117,7 +123,11 @@ class UserService:
 
         await self.user_rep.update(user_db, data)
 
-        await self.cache.delete_users(user_id)
+        await self.queue.publish_event(
+                "user_exchange",
+                "user.updated",
+                {"user_ids": user_id}
+            )
 
         return {"id": user_id, "message": "Товар обновлен"}
 
@@ -134,9 +144,15 @@ class UserService:
 
             await self.user_rep.delete(user_db)
 
-        await self.cache.delete_orders(user_id, order_ids)
-        await self.cache.delete_products(product_ids)
-        await self.cache.delete_users(user_id)
+        await self.queue.publish_event(
+            "user_exchange",
+            "user.deleted",
+            {
+                "order_ids": order_ids,
+                "user_ids": user_id,
+                "product_ids": product_ids
+            }
+        )
 
         return {"id": user_id, "message": " Пользователь удален"}
 

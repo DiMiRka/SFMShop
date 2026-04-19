@@ -1,7 +1,5 @@
-import redis
 from motor.motor_asyncio import AsyncIOMotorClient
-from typing import Union, Annotated, AsyncGenerator
-from fastapi import Depends
+from typing import Union, AsyncGenerator
 from sqlalchemy.ext.asyncio import (async_sessionmaker, create_async_engine,
                                     AsyncSession, AsyncEngine, AsyncConnection)
 
@@ -42,10 +40,5 @@ engine_replica = create_async_engine(app_settings.postgres_replica_url)
 
 async_session = create_sessionmaker(engine)
 async_session_replica = create_sessionmaker(engine_replica)
-
-write_db_dependency = Annotated[AsyncSession, Depends(get_write_session)]
-read_db_dependency = Annotated[AsyncSession, Depends(get_read_session)]
-
-redis_client = redis.asyncio.Redis.from_url(app_settings.redis_url)
 
 mongo_client = AsyncIOMotorClient(app_settings.mongo_url)

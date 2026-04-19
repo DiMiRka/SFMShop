@@ -1,16 +1,21 @@
 from loguru import logger
-import redis.asyncio as redis
 
 from src.repositories.product_repository import ProductRepository
 from src.services.cache_service import CacheService
+from src.services.queue_producer import QueueProducer
 from src.schemas import ProductResponse, ProductCreate, ProductUpdate
 from src.models.exceptions import NotFoundError
 
 
 class ProductService:
-    def __init__(self, product_rep: ProductRepository, client: redis.Redis):
+    def __init__(
+            self,
+            product_rep: ProductRepository,
+            cache: CacheService,
+            queue: QueueProducer):
         self.product_rep = product_rep
-        self.cache = CacheService(client)
+        self.cache = cache
+        self.queue = queue
 
     async def get_all_products(self, limit: int, offset: int):
         async def fetch():
@@ -49,7 +54,11 @@ class ProductService:
         data = product.model_dump(mode="json")
         product_id = await self.product_rep.create(data)
 
-        await self.cache.delete_products()
+        await self.queue.publish_event(
+            "product_exchange",
+            "product.created",
+            {}
+        )
 
         return {"id": product_id, "message": "Товар добавлен"}
 
@@ -64,7 +73,11 @@ class ProductService:
 
         await self.product_rep.update(product_db, data)
 
-        await self.cache.delete_products(product_id)
+        await self.queue.publish_event(
+            "product_exchange",
+            "product.updated",
+            {"product_ids": product_id}
+        )
 
         return {"id": product_id, "message": "Товар обновлен"}
 
@@ -78,6 +91,10 @@ class ProductService:
 
             await self.product_rep.delete(product_db)
 
-        await self.cache.delete_products(product_id)
+        await self.queue.publish_event(
+            "product_exchange",
+            "product.deleted",
+            {"product_ids": product_id}
+        )
 
         return {"id": product_id, "message": "Товар удален"}

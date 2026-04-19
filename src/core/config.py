@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import json
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,7 +21,7 @@ class AppSettings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
-    cors_origins: list[str] = os.getenv("CORS_ORIGINS")
+    cors_origins: list[str] = json.loads(os.getenv("CORS_ORIGINS", "[]"))
 
     rate_limit_login: str = os.getenv('RATE_LIMIT_LOGIN')
 

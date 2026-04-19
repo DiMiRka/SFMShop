@@ -9,6 +9,7 @@ class Notification(ABC):
 
 class EmailNotification(Notification):
     async def send(self, message: str) -> str:
+        print(f"Email: {message}")
         return f"Email: {message}"
 
 
@@ -17,5 +18,5 @@ class SMSNotification(Notification):
         return f"SMS: {message}"
 
 
-def send_notification(send_type: Notification, message: str):
-    send_type.send(message)
+async def send_notification(send_type: Notification, message: str):
+    await send_type.send(message)

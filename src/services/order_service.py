@@ -1,11 +1,11 @@
-import asyncio
 from loguru import logger
-import redis.asyncio as redis
 
 from src.repositories import OrderRepository, UserRepository, ProductRepository
 from src.services.cache_service import CacheService
+from src.services.queue_producer import QueueProducer
 from src.database.models import Order
-from src.schemas import OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate, OrderInDB, OrderItemBase
+from src.schemas import (OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate,
+                         OrderInDB, OrderItemsInDB)
 from src.models.exceptions import InsufficientStockError, BusinessLogicError, NotFoundError, ValidationError
 
 
@@ -15,11 +15,13 @@ class OrderService:
             order_rep: OrderRepository,
             user_rep: UserRepository,
             product_rep: ProductRepository,
-            client: redis.Redis):
+            cache: CacheService,
+            queue: QueueProducer):
         self.order_rep = order_rep
         self.user_rep = user_rep
         self.product_rep = product_rep
-        self.cache = CacheService(client)
+        self.cache = cache
+        self.queue = queue
 
     async def get_all_orders(self, limit: int = 100, offset: int = 0) -> list[Order]:
         async def fetch():
@@ -87,7 +89,6 @@ class OrderService:
                 logger.warning(f"User id={user_id} not found")
                 raise NotFoundError("Пользователь не найден")
 
-
             result = await self.product_rep.get_by_ids_for_update(product_ids)
             products_db = {p.id: p for p in result}
 
@@ -110,7 +111,7 @@ class OrderService:
 
                 total += product_total
 
-                order_items_db.append((product_db.id, quantity[idx], product_total))
+                order_items_db.append({"product_id": product_db.id, "quantity": quantity[idx], "total": product_total})
 
             if user_db.balance < total:
                 raise BusinessLogicError("Недостаточно средств на балансе пользователя")
@@ -122,14 +123,18 @@ class OrderService:
             order_db_id = await self.order_rep.create(order_data)
 
             for item in order_items_db:
-                data = OrderItemBase(order_id=order_db_id, **item).model_dump(exclude_unset=True)
+                data = OrderItemsInDB(order_id=order_db_id, **item).model_dump(exclude_unset=True)
                 await self.order_rep.create_order_item(data)
 
-        task_1 = self.cache.delete_products(product_ids)
-        task_2 = self.cache.delete_users(order.user_id)
-        task_3 = self.cache.delete_orders(order.user_id)
-
-        await asyncio.gather(task_1, task_2, task_3)
+        await self.queue.publish_event(
+                "order_exchange",
+                "order.created",
+                {
+                    "order_ids": order_db_id,
+                    "user_ids": user_id,
+                    "product_ids": product_ids
+                }
+            )
 
         return {
             "order_id": order_db_id,
@@ -147,7 +152,9 @@ class OrderService:
                 logger.warning(f"Order id={order_id} not found")
                 raise NotFoundError("Заказ не найден")
 
-            user_db = await self.user_rep.get_by_id_for_update(order.user_id)
+            user_id = order.user_id
+
+            user_db = await self.user_rep.get_by_id_for_update(user_id)
             new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)
 
             await self.user_rep.update(user_db, new_user_data)
@@ -166,50 +173,14 @@ class OrderService:
 
             await self.order_rep.delete(order)
 
-        task_1 = self.cache.delete_products(product_ids)
-        task_2 = self.cache.delete_users(order.user_id)
-        task_3 = self.cache.delete_orders(order.user_id)
-
-        await asyncio.gather(task_1, task_2, task_3)
+        await self.queue.publish_event(
+            "order_exchange",
+            "order.deleted",
+            {
+                "order_ids": order_id,
+                "user_ids": user_id,
+                "product_ids": product_ids
+            }
+        )
 
         return {"id": order_id, "message": "Заказ удален"}
-
-
-# Архитектура системы с брокером сообщений для проекта SFMShop:
-#
-# 1. Producer (src/api/main.py):
-#    - При создании заказа (create_order) отправляет сообщения в брокер (RabbitMQ/Kafka)
-#    - Формирует события order_created
-#    - Передает данные: user_id, order_id, items, total
-#
-# 2. Очередь сообщений (Broker):
-#    - RabbitMQ / Kafka
-#    - Хранит задачи до обработки
-#    - Гарантирует доставку (ack/nack, durable queues)
-#    - Поддерживает retry и DLQ
-#
-# 3. Consumer (src/services/queue_consumer.py):
-#    - Подписывается на события (order_created)
-#    - Обрабатывает задачи асинхронно
-#
-#    Основные задачи:
-#    - Отправка email уведомлений пользователю
-#    - Обновление аналитики / отчетов
-#    - Интеграция с payment-service
-#    - Логирование событий
-#
-# 4. Примеры задач в очереди:
-#    - send_email(user_id, order_id)
-#    - update_sales_report(order_id, total)
-#    - notify_payment_service(order_id)
-#
-# 5. Надежность:
-#    - retry с exponential backoff
-#    - DLQ для неуспешных сообщений
-#    - подтверждение обработки (ack)
-#
-# 6. Преимущества:
-#    - разгрузка API (не блокирует запрос)
-#    - масштабируемость (несколько consumers)
-#    - отказоустойчивость (задачи не теряются)
-

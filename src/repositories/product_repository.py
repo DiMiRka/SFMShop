@@ -48,6 +48,3 @@ class ProductRepository(BaseRepository):
     async def get_count_all(self) -> int:
         result = await self.db.execute(select(func.count()).select_from(Product))
         return result.scalar()
-
-
-

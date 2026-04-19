@@ -7,9 +7,12 @@ from src.schemas.base import Base
 
 
 class OrderItemBase(Base):
-    order_id: int
     product_id: int
     quantity: int
+
+
+class OrderItemsInDB(OrderItemBase):
+    order_id: int
     total: Decimal
 
 
