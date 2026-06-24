@@ -61,10 +61,6 @@ class QueueConsumer:
             routing_key=f"{queue_name}.error"
         )
 
-# =========================================================
-# CACHE CONSUMER
-# =========================================================
-
     async def _setup_cache_consumer(self):
         await self.channel.declare_queue("cache_queue.error", durable=True)
 
@@ -148,10 +144,6 @@ class QueueConsumer:
         order_ids = data.get("order_ids", None)
         logger.debug("Инвалидация кэша после изменения заказов")
         await self.cache.delete_orders(user_ids, order_ids)
-
-# =========================================================
-# NOTIFICATION CONSUMER
-# =========================================================
 
     async def _setup_notification_consumer(self):
         await self.channel.declare_queue("notification_queue.error", durable=True)
