@@ -53,11 +53,12 @@ class UserService:
         if user_db:
             raise ValidationError("Email уже зарегистрирован")
 
-        hashed_password = get_password_hash(user.password)
+        hashed_password = await get_password_hash(user.password)
         new_user = UserInDB(
             name=user.name,
             email=user.email,
             age=user.age,
+            balance=user.balance,
             hashed_password=hashed_password
         )
         new_user_db = await self.user_rep.create(new_user.model_dump(mode="json"))

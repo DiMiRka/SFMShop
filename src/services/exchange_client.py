@@ -74,6 +74,9 @@ class ExchangeRateClient:
 
         return price * rate
 
+    async def close(self):
+        await self.client.aclose()
+
 
 async def main():
     client = ExchangeRateClient()

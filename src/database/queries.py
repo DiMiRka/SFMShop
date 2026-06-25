@@ -2,15 +2,18 @@ from sqlalchemy import select, func, text
 from sqlalchemy.orm import selectinload
 from datetime import datetime
 
-from src.database.connection import read_db_dependency, redis_client
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.config import app_settings
 from src.database.models import Order, OrderItem, User, Product
 from src.schemas import ProductResponse
 from src.services.cache_service import CacheService
 
-cache = CacheService(redis_client)
+cache = CacheService(Redis.from_url(app_settings.redis_url))
 
 
-async def get_orders_with_products(db: read_db_dependency, user_id: int):
+async def get_orders_with_products(db: AsyncSession, user_id: int):
 
     async def fetch():
         result = await db.execute(
@@ -35,7 +38,7 @@ async def get_orders_with_products(db: read_db_dependency, user_id: int):
     return await cache.get_or_set_cache(f"user_orders_products:{user_id}", fetch)
 
 
-async def get_orders_count_by_users(db: read_db_dependency):
+async def get_orders_count_by_users(db: AsyncSession):
 
     async def fetch():
 
@@ -59,7 +62,7 @@ async def get_orders_count_by_users(db: read_db_dependency):
     return await cache.get_or_set_cache("orders_count_by_users", fetch)
 
 
-async def get_products_sorted_by_price(db: read_db_dependency):
+async def get_products_sorted_by_price(db: AsyncSession):
 
     async def fetch():
 
@@ -77,7 +80,7 @@ async def get_products_sorted_by_price(db: read_db_dependency):
     return await cache.get_or_set_cache("products_sorted_by_price", fetch)
 
 
-async def get_user_order_history(db: read_db_dependency, user_id):
+async def get_user_order_history(db: AsyncSession, user_id):
 
     async def fetch():
 
@@ -113,7 +116,7 @@ async def get_user_order_history(db: read_db_dependency, user_id):
     return await cache.get_or_set_cache(f"user_order_history:{user_id}", fetch)
 
 
-async def get_order_statistics(db: read_db_dependency):
+async def get_order_statistics(db: AsyncSession):
 
     async def fetch():
 
@@ -149,7 +152,7 @@ async def get_order_statistics(db: read_db_dependency):
     return await cache.get_or_set_cache("order_statistics", fetch)
 
 
-async def get_top_products(db: read_db_dependency, limit=5):
+async def get_top_products(db: AsyncSession, limit=5):
 
     async def fetch():
 
@@ -183,7 +186,7 @@ async def get_top_products(db: read_db_dependency, limit=5):
     return await cache.get_or_set_cache(f"top_products:{limit}", fetch)
 
 
-async def generate_sales_report(db: read_db_dependency, start_date: datetime):
+async def generate_sales_report(db: AsyncSession, start_date: datetime):
 
     async def fetch():
 
@@ -212,7 +215,7 @@ async def generate_sales_report(db: read_db_dependency, start_date: datetime):
     return await cache.get_or_set_cache(f"sales_report:{start_date}", fetch)
 
 
-async def calculate_total_revenue(db: read_db_dependency, start_date, end_date):
+async def calculate_total_revenue(db: AsyncSession, start_date, end_date):
 
     async def fetch():
 
@@ -235,3 +238,4 @@ async def calculate_total_revenue(db: read_db_dependency, start_date, end_date):
         return response
 
     return await cache.get_or_set_cache(f"total_revenue:{start_date}:{end_date}", fetch)
+

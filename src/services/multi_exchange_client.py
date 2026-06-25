@@ -73,6 +73,9 @@ class MultiExchangeClient:
 
         return price * rate
 
+    async def close(self):
+        await self.client.aclose()
+
 
 async def main():
     client = MultiExchangeClient([
@@ -91,4 +94,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

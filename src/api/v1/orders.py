@@ -27,7 +27,7 @@ async def post_order(
         service: order_write_service,
         order: OrderCreate):
 
-    result = await service.create_order(order, request.app.state.queue)
+    result = await service.create_order(order)
 
     return result
 

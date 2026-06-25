@@ -15,3 +15,6 @@ __pycache__/
 *.sqlite
 *.dump
 *.bak
+.coverage
+
+htmlcov/

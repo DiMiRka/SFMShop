@@ -16,8 +16,8 @@ class UserBase(Base):
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=20)
 
-    @classmethod
     @field_validator('password')
+    @classmethod
     def validate_password(cls, v: str) -> str:
         if not any(c.isdigit() for c in v):
             raise ValueError(
