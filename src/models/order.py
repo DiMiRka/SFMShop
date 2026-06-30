@@ -8,6 +8,13 @@ class Order:
     def calculate_total(self):
         return OrderCalculator.calculate_total(self)
 
+    def calculate_discount(self, discount_percent: float):
+        return OrderCalculator.calculate_discount(self, discount_percent)
+
+    @staticmethod
+    def calculate_delivery(weight, distance):
+        return OrderCalculator.calculate_delivery(weight, distance)
+
 
 class OrderCalculator:
 
@@ -22,6 +29,14 @@ class OrderCalculator:
     def calculate_discount(order: Order, discount_percent: float) -> float:
         total = OrderCalculator.calculate_total(order)
         return total * (1 - discount_percent / 100)
+
+    @staticmethod
+    def calculate_delivery(weight: float, distance: float) -> float:
+        base_price = 100
+        weight_price = weight * 10
+        distance_price = distance * 5
+
+        return base_price + distance_price + weight_price
 
 
 class OrderValidator:

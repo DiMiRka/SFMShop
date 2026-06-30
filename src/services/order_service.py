@@ -67,6 +67,9 @@ class OrderService:
         return await self.cache.get_or_set_cache(f"order:{order_id}", fetch)
 
     async def create_order(self, order: OrderCreate):
+        if not order.items:
+            raise ValidationError("Empty order")
+
         quantity = []
         product_ids = []
 

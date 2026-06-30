@@ -44,3 +44,15 @@ def test_order_calculate_total(sample_user, sample_product):
 )
 def test_calculate_discount_all_cases(sample_order, discount_percent, expected):
     assert OrderCalculator.calculate_discount(sample_order, discount_percent) == expected
+
+
+@pytest.mark.parametrize(
+    "weight,distance,expected",
+    [
+        (1, 10, 160),
+        (5, 50, 400),
+        (10, 100, 700),
+    ]
+)
+def test_calculate_delivery(weight, distance, expected):
+    assert OrderCalculator.calculate_delivery(weight, distance) == expected
