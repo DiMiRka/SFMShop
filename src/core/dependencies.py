@@ -10,7 +10,6 @@ from src.database.models import User
 from src.database import get_write_session, get_read_session
 from src.services.cache_service import CacheService
 from src.services.queue_producer import QueueProducer
-from src.services.queue_consumer import QueueConsumer
 from src.core.security import decode_token
 from src.schemas import TokenData
 from src.repositories import ProductRepository, OrderRepository, UserRepository

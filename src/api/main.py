@@ -31,10 +31,13 @@ async def lifespan(app: FastAPI):
     await app.state.redis.ping()
 
     app.state.http_client = httpx.AsyncClient(timeout=5)
-    app.state.queue = await QueueProducer.get_instance()
+    app.state.queue = await QueueProducer.get_instance(app_settings.rabbitmq_url)
     app.state.cache = CacheService(app.state.redis)
 
-    consumer = QueueConsumer(cache=app.state.cache)
+    consumer = QueueConsumer(
+        cache=app.state.cache,
+        url=app_settings.rabbitmq_url,
+    )
     await consumer.start()
 
     app.state.consumer = consumer

@@ -248,12 +248,13 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
 
     class QueueProducer:
         @staticmethod
-        async def get_instance():
+        async def get_instance(url):
             return Queue()
 
     class Consumer:
-        def __init__(self, cache):
+        def __init__(self, cache, url):
             self.cache = cache
+            self.url = url
 
         async def start(self):
             self.started = True
@@ -325,7 +326,7 @@ async def test_queue_producer_and_consumer_helpers(monkeypatch):
     await producer.close()
 
     cache = FakeCache()
-    consumer = queue_consumer.QueueConsumer(cache)
+    consumer = queue_consumer.QueueConsumer(cache, "amqp://test")
     assert consumer.get_retry_count(SimpleNamespace(headers={"x-death": [{"count": 2}]})) == 2
     assert consumer.get_retry_count(SimpleNamespace(headers=None)) == 0
     await consumer.invalidate_user_cache({"user_id": 1})

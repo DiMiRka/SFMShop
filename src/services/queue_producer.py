@@ -8,7 +8,7 @@ class QueueProducer:
     _instance = None
     _lock = asyncio.Lock()
 
-    def __init__(self, url: str = "amqp://guest:guest@localhost/"):
+    def __init__(self, url: str):
         self.url = url
         self.max_retries: int = 3
         self.base_delay = 0.5
@@ -19,7 +19,7 @@ class QueueProducer:
         self.exchanges: dict[str, aio_pika.abc.AbstractExchange] = {}
 
     @classmethod
-    async def get_instance(cls, url: str = "amqp://guest:guest@localhost/"):
+    async def get_instance(cls, url: str):
         async with cls._lock:
             if cls._instance is None:
                 instance = cls(url)

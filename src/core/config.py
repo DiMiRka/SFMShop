@@ -16,6 +16,11 @@ class AppSettings(BaseSettings):
 
     mongo_url: str = os.getenv('MONGO_URL')
 
+    rabbitmq_url: str = os.getenv(
+        "RABBITMQ_URL",
+        "amqp://guest:guest@localhost:5672/",
+    )
+
     algorithm: str = 'HS256'
     jwt_secret: str = os.getenv('JWT_SECRET')
     access_token_expire_minutes: int = 30

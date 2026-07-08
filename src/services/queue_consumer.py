@@ -7,7 +7,7 @@ from src.services.cache_service import CacheService
 
 
 class QueueConsumer:
-    def __init__(self, cache: CacheService, url="amqp://guest:guest@localhost/"):
+    def __init__(self, cache: CacheService, url: str):
         self.url = url
         self.cache = cache
         self.max_retries = 3
