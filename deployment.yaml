@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sfmshop-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sfmshop
+  template:
+    metadata:
+      labels:
+        app: sfmshop
+    spec:
+      containers:
+        - name: app
+          image: sfmshop:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: sfmshop-config
+            - secretRef:
+                name: sfmshop-secrets
