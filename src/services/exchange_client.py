@@ -1,18 +1,23 @@
-import httpx
 import asyncio
 from typing import Optional
+
+import httpx
 from loguru import logger
+
+from src.core.config import app_settings
 
 
 class ExchangeRateClient:
 
     def __init__(self,
-                 base_url: str = "https://api.exchangerate-api.com/v4/latest",
-                 timeout: int = 5,
-                 max_retries: int = 3):
-        self.base_url = base_url
-        self.timeout = timeout
-        self.max_retries = max_retries
+                 base_url: str | None = None,
+                 timeout: float | None = None,
+                 max_retries: int | None = None,
+                 backoff_base: float | None = None):
+        self.base_url = base_url or app_settings.exchange_api_url
+        self.timeout = timeout if timeout is not None else app_settings.exchange_timeout
+        self.max_retries = max_retries if max_retries is not None else app_settings.exchange_max_retries
+        self.backoff_base = backoff_base if backoff_base is not None else app_settings.exchange_backoff_base
         self.client = httpx.AsyncClient(timeout=self.timeout)
 
     async def get_exchange_rate(self, base: str, target: str) -> Optional[float]:
@@ -29,31 +34,31 @@ class ExchangeRateClient:
                 rate = data.get("rates", {}).get(target)
 
                 if rate is None:
-                    logger.warning(f"Валюта {target} не найдена")
+                    logger.warning(f"currency_not_found target={target}")
                     return None
 
                 return rate
 
             except httpx.ReadTimeout:
                 if attempt < self.max_retries - 1:
-                    delay = 2 ** attempt
-                    logger.warning(f"Таймаут, повтор через {delay} сек...")
+                    delay = self.backoff_base ** attempt
+                    logger.warning(f"exchange_timeout retry_in={delay}")
                     await asyncio.sleep(delay)
                 else:
-                    logger.warning("Превышено время ожидания после всех попыток")
+                    logger.warning("exchange_timeout_retries_exceeded")
                     return None
 
             except httpx.ConnectError:
                 if attempt < self.max_retries - 1:
-                    delay = 2 ** attempt
-                    logger.warning(f"Ошибка подключения, повтор через {delay} сек...")
+                    delay = self.backoff_base ** attempt
+                    logger.warning(f"exchange_connect_error retry_in={delay}")
                     await asyncio.sleep(delay)
                 else:
-                    logger.warning("Ошибка подключения после всех попыток")
+                    logger.warning("exchange_connect_retries_exceeded")
                     return None
 
             except httpx.HTTPStatusError as e:
-                logger.warning(f"Ошибка запроса: {e}")
+                logger.warning(f"exchange_http_error error={e}")
                 return None
 
         return None
@@ -87,7 +92,7 @@ async def main():
     if converted_price:
         print(f"{price} USD = {converted_price} RUB")
     else:
-        print("Не удалось получить курс валют")
+        print("exchange_rate_unavailable")
 
 if __name__ == "__main__":
     asyncio.run(main())

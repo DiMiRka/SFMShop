@@ -248,7 +248,7 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
 
     class QueueProducer:
         @staticmethod
-        async def get_instance(url):
+        async def get_instance(url, **kwargs):
             return Queue()
 
     class Consumer:
@@ -357,5 +357,3 @@ def test_setup_logging_is_idempotent(monkeypatch):
     log_service.setup_logging()
 
     assert calls.count("remove") == 1
-
-

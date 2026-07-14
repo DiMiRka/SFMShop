@@ -7,7 +7,6 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 import uvicorn
 import time
-import os
 
 from src.api.v1 import v1_router
 from src.core.config import app_settings, uvicorn_options
@@ -24,14 +23,19 @@ from src.models.exceptions import (ValidationError, NotFoundError, BusinessLogic
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    configure_sentry(os.getenv("SENTRY_DSN"))
-    log_service.info("Запуск приложения")
+    configure_sentry(app_settings.sentry_dsn)
+    log_service.info("application_starting")
 
     app.state.redis = redis.asyncio.Redis.from_url(app_settings.redis_url)
     await app.state.redis.ping()
 
     app.state.http_client = httpx.AsyncClient(timeout=5)
-    app.state.queue = await QueueProducer.get_instance(app_settings.rabbitmq_url)
+    app.state.queue = await QueueProducer.get_instance(
+        app_settings.rabbitmq_url,
+        max_retries=app_settings.rabbitmq_max_retries,
+        base_delay=app_settings.rabbitmq_base_delay,
+        backoff_multiplier=app_settings.rabbitmq_backoff_multiplier,
+    )
     app.state.cache = CacheService(app.state.redis)
 
     consumer = QueueConsumer(
@@ -49,13 +53,14 @@ async def lifespan(app: FastAPI):
 
     await app.state.redis.close()
     await app.state.http_client.aclose()
-    log_service.info("Приложение завершило работу")
+    log_service.info("application_stopped")
 
 sfmshop_app = FastAPI(
     title="SFMShop API",
-    description="API для интернет магазина SFMShop",
+    description="SFMShop API",
     version="1.0.0",
     lifespan=lifespan,
+    debug=app_settings.debug,
 )
 
 sfmshop_app.include_router(v1_router)
@@ -78,7 +83,7 @@ async def log_requests(request: Request, call_next):
     client_host = client.host if client else None
 
     log_service.info(
-        "HTTP запрос обрабатывается",
+        "http_request_started",
         method=method,
         path=path,
         client_host=client_host,
@@ -89,7 +94,7 @@ async def log_requests(request: Request, call_next):
     except Exception as exc:
         process_time = time.time() - start_time
         log_service.error(
-            "HTTP ошибка запроса",
+            "http_request_failed",
             exception=exc,
             method=method,
             path=path,
@@ -108,11 +113,11 @@ async def log_requests(request: Request, call_next):
     }
 
     if response.status_code >= 500:
-        log_service.error("HTTP запрос ошибка сервера", **log_fields)
+        log_service.error("http_request_server_error", **log_fields)
     elif response.status_code >= 400:
-        log_service.warning("HTTP запрос ошибка клиента", **log_fields)
+        log_service.warning("http_request_client_error", **log_fields)
     else:
-        log_service.info("HTTP запрос обработан", **log_fields)
+        log_service.info("http_request_completed", **log_fields)
 
     response.headers["X-Process-Time"] = str(process_time)
 
@@ -131,5 +136,5 @@ sfmshop_app.add_exception_handler(BusinessLogicError, business_exception_handler
 sfmshop_app.add_exception_handler(Exception, base_exception_handler)
 
 if __name__ == "__main__":
-    log_service.info("Сервер запущен")
+    log_service.info("server_started")
     uvicorn.run("src.api.main:sfmshop_app", **uvicorn_options)

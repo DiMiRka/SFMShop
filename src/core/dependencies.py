@@ -14,6 +14,7 @@ from src.core.security import decode_token
 from src.schemas import TokenData
 from src.repositories import ProductRepository, OrderRepository, UserRepository
 from src.services import (ProductService, UserService, OrderService, ExchangeRateClient, MultiExchangeClient)
+from src.core.config import app_settings
 
 
 def get_redis(request: Request):
@@ -51,13 +52,13 @@ def get_http_client(request: Request):
 http_client_dependency = Annotated[httpx.AsyncClient, Depends(get_http_client)]
 
 
-# База данных
+# Database
 # ----------------------------------------------------------------------------------------------------------------------
 write_db_dependency = Annotated[AsyncSession, Depends(get_write_session)]
 read_db_dependency = Annotated[AsyncSession, Depends(get_read_session)]
 
 
-# Авторизация
+# Authorization
 # ----------------------------------------------------------------------------------------------------------------------
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
 
@@ -91,7 +92,7 @@ async def get_current_user(db: read_db_dependency, token: str = Depends(oauth2_s
 current_user = Annotated[User, Depends(get_current_user)]
 
 
-# Репозитории
+# Repositories
 # ----------------------------------------------------------------------------------------------------------------------
 async def get_product_write_repository(db: write_db_dependency) -> ProductRepository:
     return ProductRepository(db)
@@ -129,7 +130,7 @@ u_rep_write_dependency = Annotated[UserRepository, Depends(get_user_write_reposi
 u_rep_read_dependency = Annotated[UserRepository, Depends(get_user_read_repository)]
 
 
-# Сервисы
+# Services
 # ----------------------------------------------------------------------------------------------------------------------
 async def get_product_write_service(rep: p_rep_write_dependency, cache: cache_dependency, queue: queue_dependency) -> ProductService:
     return ProductService(rep, cache, queue)
@@ -186,10 +187,15 @@ order_write_service = Annotated[OrderService, Depends(get_order_write_service)]
 order_read_service = Annotated[OrderService, Depends(get_order_read_service)]
 
 
-# Внешние клиенты
+# External clients
 # ----------------------------------------------------------------------------------------------------------------------
 async def get_exchange_client():
-    client = ExchangeRateClient()
+    client = ExchangeRateClient(
+        base_url=app_settings.exchange_api_url,
+        timeout=app_settings.exchange_timeout,
+        max_retries=app_settings.exchange_max_retries,
+        backoff_base=app_settings.exchange_backoff_base,
+    )
     try:
         yield client
     finally:
@@ -200,11 +206,12 @@ exchange_client = Annotated[ExchangeRateClient, Depends(get_exchange_client)]
 
 
 async def get_multi_exchange_client():
-    client = MultiExchangeClient([
-        "https://api.exchangerate-api.com/v4/latest",
-        "https://api.currencyapi.com/v3/latest",
-        "https://api.fixer.io/latest"
-    ])
+    client = MultiExchangeClient(
+        api_urls=app_settings.exchange_api_urls,
+        timeout=app_settings.exchange_timeout,
+        max_retries=app_settings.exchange_max_retries,
+        backoff_base=app_settings.exchange_backoff_base,
+    )
     try:
         yield client
     finally:
