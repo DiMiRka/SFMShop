@@ -16,7 +16,7 @@ class ProductCreate(ProductBase):
     pass
 
 
-class ProductUpdate(ProductBase):
+class ProductUpdate(Base):
     name: Optional[str] = None
     price: Optional[Decimal] = None
     quantity: Optional[int] = None

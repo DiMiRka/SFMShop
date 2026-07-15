@@ -1,3 +1,4 @@
+from decimal import Decimal
 from loguru import logger
 
 from src.repositories import OrderRepository, UserRepository, ProductRepository
@@ -70,8 +71,8 @@ class OrderService:
         if not order.items:
             raise ValidationError("Empty order")
 
-        quantity = []
-        product_ids = []
+        quantity: list[int] = []
+        product_ids: list[int] = []
 
         for item in order.items:
             item_quantity = item.quantity
@@ -95,8 +96,8 @@ class OrderService:
             result = await self.product_rep.get_by_ids_for_update(product_ids)
             products_db = {p.id: p for p in result}
 
-            order_items_db = []
-            total = 0
+            order_items_db: list[tuple[int, int, Decimal]] = []
+            total = Decimal("0")
 
             for idx, product_id in enumerate(product_ids):
                 product_db = products_db.get(product_id)
@@ -110,11 +111,11 @@ class OrderService:
 
                 product_db.quantity -= quantity[idx]
 
-                product_total = product_db.price * quantity[idx]
+                product_total: Decimal = product_db.price * quantity[idx]
 
                 total += product_total
 
-                order_items_db.append({"product_id": product_db.id, "quantity": quantity[idx], "total": product_total})
+                order_items_db.append((product_db.id, quantity[idx], product_total))
 
             if user_db.balance < total:
                 raise BusinessLogicError("Недостаточно средств на балансе пользователя")
@@ -125,8 +126,13 @@ class OrderService:
 
             order_db_id = await self.order_rep.create(order_data)
 
-            for item in order_items_db:
-                data = OrderItemsInDB(order_id=order_db_id, **item).model_dump(exclude_unset=True)
+            for product_id, item_quantity, product_total in order_items_db:
+                data = OrderItemsInDB(
+                    order_id=order_db_id,
+                    product_id=product_id,
+                    quantity=item_quantity,
+                    total=product_total,
+                ).model_dump(exclude_unset=True)
                 await self.order_rep.create_order_item(data)
 
         await self.queue.publish_event(

@@ -1,3 +1,4 @@
+from typing import cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -47,4 +48,4 @@ class ProductRepository(BaseRepository):
 
     async def get_count_all(self) -> int:
         result = await self.db.execute(select(func.count()).select_from(Product))
-        return result.scalar()
+        return cast(int, result.scalar())

@@ -1,6 +1,6 @@
 FROM python:3.11-slim AS builder
 WORKDIR /app
-COPY ../requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 
@@ -12,6 +12,6 @@ ENV PYTHONUNBUFFERED=1
 ENV PATH=/root/.local/bin:$PATH
 
 COPY --from=builder /root/.local /root/.local
-COPY .. .
+COPY . .
 
 CMD ["uvicorn", "src.api.main:sfmshop_app", "--host", "0.0.0.0", "--port", "8000"]

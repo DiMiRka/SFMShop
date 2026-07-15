@@ -59,6 +59,7 @@ class UserService:
             email=user.email,
             age=user.age,
             balance=user.balance,
+            is_active=user.is_active,
             hashed_password=hashed_password
         )
         new_user_db = await self.user_rep.create(new_user.model_dump(mode="json"))

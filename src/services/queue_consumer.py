@@ -43,14 +43,19 @@ class QueueConsumer:
             logger.error(f"Ошибка подключения к RabbitMQ: {e}")
 
     @staticmethod
-    def get_retry_count(message: aio_pika.IncomingMessage):
+    def get_retry_count(message: aio_pika.IncomingMessage) -> int:
         headers = message.headers or {}
         deaths = headers.get("x-death", [])
 
-        if not deaths:
+        if not isinstance(deaths, list) or not deaths:
             return 0
 
-        return deaths[0].get("count", 0)
+        first_death = deaths[0]
+        if not isinstance(first_death, dict):
+            return 0
+
+        count = first_death.get("count", 0)
+        return count if isinstance(count, int) else 0
 
     async def move_to_error_queue(self, message, queue_name):
         await self.channel.default_exchange.publish(
@@ -103,7 +108,7 @@ class QueueConsumer:
         async with message.process(requeue=False):
             try:
                 data = json.loads(message.body)
-                routing_key = message.routing_key
+                routing_key = message.routing_key or ""
 
                 logger.info(f"[CACHE] {routing_key} -> {data}")
 

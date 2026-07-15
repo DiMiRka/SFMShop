@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from typing import Any, cast
 from fastapi import FastAPI, Request
 import redis
 import httpx
@@ -126,14 +127,14 @@ async def log_requests(request: Request, call_next):
 sfmshop_app.state.limiter = limiter
 sfmshop_app.add_exception_handler(
     RateLimitExceeded,
-    _rate_limit_exceeded_handler,
+    cast(Any, _rate_limit_exceeded_handler),
 )
 
-sfmshop_app.add_exception_handler(ValidationError, validation_exception_handler)
-sfmshop_app.add_exception_handler(NotFoundError, validation_notfound_handler)
-sfmshop_app.add_exception_handler(UnauthorizedError, unauthorized_handler)
-sfmshop_app.add_exception_handler(BusinessLogicError, business_exception_handler)
-sfmshop_app.add_exception_handler(Exception, base_exception_handler)
+sfmshop_app.add_exception_handler(ValidationError, cast(Any, validation_exception_handler))
+sfmshop_app.add_exception_handler(NotFoundError, cast(Any, validation_notfound_handler))
+sfmshop_app.add_exception_handler(UnauthorizedError, cast(Any, unauthorized_handler))
+sfmshop_app.add_exception_handler(BusinessLogicError, cast(Any, business_exception_handler))
+sfmshop_app.add_exception_handler(Exception, cast(Any, base_exception_handler))
 
 if __name__ == "__main__":
     log_service.info("server_started")

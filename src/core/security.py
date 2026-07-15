@@ -14,7 +14,7 @@ async def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-async def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
+async def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta

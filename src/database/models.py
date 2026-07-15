@@ -3,10 +3,10 @@ from datetime import datetime
 from typing import List
 
 from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Text, func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, mapped_column, Mapped
+from sqlalchemy.orm import DeclarativeBase, relationship, mapped_column, Mapped
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 
 class User(Base):
@@ -17,7 +17,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(Text, nullable=False, server_default='password')
     email: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
     age: Mapped[int] = mapped_column(Integer, CheckConstraint("age >= 18", name="check_user_age"), nullable=False)
-    balance: Mapped[DECIMAL] = mapped_column(DECIMAL(10, 2), default=0.0)
+    balance: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), default=0.0)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

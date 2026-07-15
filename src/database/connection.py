@@ -41,4 +41,4 @@ engine_replica = create_async_engine(app_settings.postgres_replica_url)
 async_session = create_sessionmaker(engine)
 async_session_replica = create_sessionmaker(engine_replica)
 
-mongo_client = AsyncIOMotorClient(app_settings.mongo_url)
+mongo_client: AsyncIOMotorClient = AsyncIOMotorClient(app_settings.mongo_url)

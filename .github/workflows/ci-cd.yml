@@ -39,12 +39,12 @@ jobs:
 
       - name: Lint with ruff
         run: |
-          pip install ruff
+          pip install ruff==0.15.21
           ruff check src/
 
       - name: Type check with mypy
         run: |
-          pip install mypy
+          pip install mypy==2.3.0
           mypy src/ --ignore-missing-imports
 
       - name: Run tests

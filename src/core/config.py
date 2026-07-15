@@ -1,4 +1,5 @@
 import multiprocessing
+from typing import Any
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -83,7 +84,7 @@ class AppSettings(BaseSettings):
 
 app_settings = AppSettings()
 
-uvicorn_options = {
+uvicorn_options: dict[str, Any] = {
     "host": app_settings.app_host,
     "port": app_settings.app_port,
     "workers": app_settings.cpu_count or multiprocessing.cpu_count(),

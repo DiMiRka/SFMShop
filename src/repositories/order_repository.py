@@ -37,7 +37,7 @@ class OrderRepository(BaseRepository):
 
     async def get_order_ids_by_user(self, user_id: int) -> list[int] | None:
         result = await self.db.execute(select(Order.id).where(Order.user_id == user_id))
-        orders = result.scalars().all()
+        orders = list(result.scalars().all())
 
         return orders if orders else None
 
@@ -45,7 +45,7 @@ class OrderRepository(BaseRepository):
         result = await self.db.execute(select(OrderItem.product_id)
                                        .join(Order, OrderItem.order_id == Order.id)
                                        .where(Order.user_id == user_id))
-        products = result.scalars().all()
+        products = list(result.scalars().all())
 
         return products if products else None
 
