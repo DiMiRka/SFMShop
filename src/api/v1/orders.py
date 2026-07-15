@@ -1,10 +1,9 @@
-from fastapi import APIRouter, status, BackgroundTasks, Request
+from fastapi import APIRouter, status, Request
 from typing import List
 
 
 from src.schemas import OrderCreate, OrderResponse
 from src.core.dependencies import current_user, order_write_service, order_read_service
-from src.services.notifications_service import EmailNotification, send_notification
 
 orders_router = APIRouter(prefix="/orders", tags=['orders'])
 

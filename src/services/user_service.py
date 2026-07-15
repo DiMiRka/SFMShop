@@ -41,7 +41,7 @@ class UserService:
 
             if not user:
                 logger.warning(f"User id={user_id} not found")
-                raise NotFoundError(f"Пользователь не найден")
+                raise NotFoundError("Пользователь не найден")
 
             return UserResponse.model_validate(user).model_dump(mode="json")
 

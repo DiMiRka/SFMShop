@@ -44,7 +44,7 @@ class MultiExchangeClient:
 
                     return rate
 
-                except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+                except (httpx.ReadTimeout, httpx.ConnectTimeout):
                     if attempt < self.max_retries - 1:
                         delay = self.backoff_base ** attempt
                         logger.warning(f"exchange_api_error url={api_url} retry_in={delay}")

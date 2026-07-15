@@ -131,7 +131,7 @@ class QueueConsumer:
 
     async def invalidate_user_cache(self, data: dict):
         user_id = data.get("user_id", None)
-        logger.info(f"Инвалидация кэша после изменения пользователей")
+        logger.info("Инвалидация кэша после изменения пользователей")
         await self.cache.delete_users(user_id)
 
     async def invalidate_product_cache(self, data: dict):
@@ -176,7 +176,7 @@ class QueueConsumer:
             try:
                 data = json.loads(message.body)
                 logger.info(f"Отправка email для заказа {data.get('order_id')}")
-            except Exception as e:
+            except Exception:
                 retry_count = self.get_retry_count(message)
 
                 if retry_count >= self.max_retries:

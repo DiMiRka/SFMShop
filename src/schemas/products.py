@@ -1,4 +1,4 @@
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
