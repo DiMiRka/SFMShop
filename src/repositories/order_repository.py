@@ -31,8 +31,15 @@ class OrderRepository(BaseRepository):
         result = await self.db.execute(select(OrderItem).where(OrderItem.order_id == order_id))
         return list(result.scalars().all())
 
-    async def get_user_orders(self, user_id: int) -> list[Order]:
-        result = await self.db.execute(select(Order).options(selectinload(Order.items)).where(Order.user_id == user_id))
+    async def get_user_orders(self, user_id: int, limit: int | None = None, offset: int = 0) -> list[Order]:
+        result = await self.db.execute(
+            select(Order)
+            .options(selectinload(Order.items))
+            .where(Order.user_id == user_id)
+            .order_by(Order.id)
+            .offset(offset)
+            .limit(limit)
+        )
         return list(result.scalars().all())
 
     async def get_order_ids_by_user(self, user_id: int) -> list[int] | None:

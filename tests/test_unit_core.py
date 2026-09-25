@@ -201,7 +201,7 @@ def test_schemas_validate_and_serialize():
 
     item = OrderItemBase(product_id=1, quantity=2)
     assert OrderItemsInDB(order_id=5, product_id=1, quantity=2, total=Decimal("20.00")).order_id == 5
-    assert OrderCreate(user_id=1, items=[item]).items[0].product_id == 1
+    assert OrderCreate(items=[item]).items[0].product_id == 1
     assert OrderItemResponse(product_id=1, quantity=2, total=Decimal("20.00")).total == Decimal("20.00")
     assert OrderResponse(
         id=1,

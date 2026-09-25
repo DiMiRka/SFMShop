@@ -50,9 +50,9 @@ def build_service():
 
 async def test_order_service_create_order_happy_path_with_mocks():
     service, order_rep, user_rep, product_rep, queue = build_service()
-    order = OrderCreate(user_id=1, items=[OrderItemBase(product_id=2, quantity=1)])
+    order = OrderCreate(items=[OrderItemBase(product_id=2, quantity=1)])
 
-    result = await service.create_order(order)
+    result = await service.create_order(1, order)
 
     assert result["order_id"] == 42
     assert result["total"] == 300.0
@@ -66,10 +66,10 @@ async def test_order_service_create_order_happy_path_with_mocks():
 async def test_order_service_empty_order_raises_and_dependencies_not_called():
     """empty_raises: DB and notification are not called."""
     service, order_rep, user_rep, product_rep, queue = build_service()
-    order = OrderCreate(user_id=1, items=[])
+    order = OrderCreate(items=[])
 
     with pytest.raises(ValidationError):
-        await service.create_order(order)
+        await service.create_order(1, order)
 
     user_rep.get_by_id_for_update.assert_not_awaited()
     product_rep.get_by_ids_for_update.assert_not_awaited()
@@ -80,10 +80,10 @@ async def test_order_service_empty_order_raises_and_dependencies_not_called():
 async def test_order_service_db_failure_does_not_send_notification():
     service, order_rep, user_rep, product_rep, queue = build_service()
     order_rep.create.side_effect = RuntimeError("DB error")
-    order = OrderCreate(user_id=1, items=[OrderItemBase(product_id=2, quantity=1)])
+    order = OrderCreate(items=[OrderItemBase(product_id=2, quantity=1)])
 
     with pytest.raises(RuntimeError, match="DB error"):
-        await service.create_order(order)
+        await service.create_order(1, order)
 
     order_rep.create.assert_awaited_once()
     queue.publish_event.assert_not_awaited()

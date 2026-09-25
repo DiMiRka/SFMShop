@@ -11,12 +11,12 @@ orders_router = APIRouter(prefix="/orders", tags=['orders'])
 @orders_router.get("/", summary="Получить все заказы",
                    response_model=List[OrderResponse], status_code=status.HTTP_200_OK)
 async def get_orders(cu: current_user, service: order_read_service, limit: int = 100, offset: int = 0):
-    return await service.get_all_orders(limit, offset)
+    return await service.get_all_orders(cu.id, limit, offset)
 
 
 @orders_router.get("/{order_id}", summary="Получить заказ", status_code=status.HTTP_200_OK)
 async def get_order(cu: current_user, service: order_read_service, order_id: int):
-    return await service.get_order_by_id(order_id)
+    return await service.get_order_by_id(order_id, cu.id)
 
 
 @orders_router.post("/", summary="Создать новый заказ", status_code=status.HTTP_201_CREATED)
@@ -26,11 +26,11 @@ async def post_order(
         service: order_write_service,
         order: OrderCreate):
 
-    result = await service.create_order(order)
+    result = await service.create_order(cu.id, order)
 
     return result
 
 
 @orders_router.delete("/{order_id}", summary="Удалить заказ", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_order(cu: current_user, service: order_write_service, order_id: int):
-    return await service.delete_order(order_id)
+    return await service.delete_order(order_id, cu.id)

@@ -209,16 +209,16 @@ async def test_api_route_functions_delegate_to_services():
         async def update_user(self, user_id, user): return (user_id, user.name)
         async def delete_user(self, user_id): return user_id
         async def get_user_orders(self, user_id): return ("orders", user_id)
-        async def get_all_orders(self, limit, offset): return ("orders", limit, offset)
-        async def get_order_by_id(self, order_id): return ("order", order_id)
-        async def create_order(self, order): return order.user_id
-        async def delete_order(self, order_id): return order_id
+        async def get_all_orders(self, user_id, limit, offset): return ("orders", user_id, limit, offset)
+        async def get_order_by_id(self, order_id, user_id): return ("order", order_id, user_id)
+        async def create_order(self, user_id, order): return (user_id, len(order.items))
+        async def delete_order(self, order_id, user_id): return (order_id, user_id)
         async def register_user(self, user): return user.email
         async def authorized_user(self, form_data): return form_data.username
         async def create_access_token_db(self, token): return token
 
     service = Service()
-    cu = object()
+    cu = SimpleNamespace(id=5)
     assert await get_products(service, None, 2, 3) == ("products", 2, 3)
     assert await get_product(service, 1) == ("product", 1)
     assert await post_product(cu, service, ProductCreate(name="A", price=Decimal("1.00"), quantity=1)) == "A"
@@ -232,11 +232,12 @@ async def test_api_route_functions_delegate_to_services():
     assert await get_user_orders(cu, service, 1) == ("orders", 1)
 
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(queue=object())))
-    order = OrderCreate(user_id=1, items=[OrderItemBase(product_id=1, quantity=1)])
-    assert await get_orders(cu, service, 2, 3) == ("orders", 2, 3)
-    assert await get_order(cu, service, 1) == ("order", 1)
-    assert await post_order(request, cu, service, order) == 1
-    assert await delete_order(cu, service, 1) == 1
+    order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
+    # Роутеры заказов всегда передают id текущего пользователя в сервис
+    assert await get_orders(cu, service, 2, 3) == ("orders", 5, 2, 3)
+    assert await get_order(cu, service, 1) == ("order", 1, 5)
+    assert await post_order(request, cu, service, order) == (5, 1)
+    assert await delete_order(cu, service, 1) == (1, 5)
 
     user = UserCreate(name="A", email="a@test.com", age=18, balance=1, password="abc12345")
     assert await register(service, user) == "a@test.com"
