@@ -18,7 +18,7 @@ def teardown_function():
 
 
 async def override_current_user():
-    return SimpleNamespace(id=1)
+    return SimpleNamespace(id=1, is_admin=False)
 
 
 def test_get_products_with_mocked_service():

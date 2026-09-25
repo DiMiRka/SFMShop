@@ -218,7 +218,7 @@ async def test_api_route_functions_delegate_to_services():
         async def create_access_token_db(self, token): return token
 
     service = Service()
-    cu = SimpleNamespace(id=5)
+    cu = SimpleNamespace(id=1, is_admin=False)
     assert await get_products(service, None, 2, 3) == ("products", 2, 3)
     assert await get_product(service, 1) == ("product", 1)
     assert await post_product(cu, service, ProductCreate(name="A", price=Decimal("1.00"), quantity=1)) == "A"
@@ -234,12 +234,18 @@ async def test_api_route_functions_delegate_to_services():
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(queue=object())))
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
     # Роутеры заказов всегда передают id текущего пользователя в сервис
-    assert await get_orders(cu, service, 2, 3) == ("orders", 5, 2, 3)
-    assert await get_order(cu, service, 1) == ("order", 1, 5)
-    assert await post_order(request, cu, service, order) == (5, 1)
-    assert await delete_order(cu, service, 1) == (1, 5)
+    assert await get_orders(cu, service, 2, 3) == ("orders", 1, 2, 3)
+    assert await get_order(cu, service, 1) == ("order", 1, 1)
+    assert await post_order(request, cu, service, order) == (1, 1)
+    assert await delete_order(cu, service, 1) == (1, 1)
 
-    user = UserCreate(name="A", email="a@test.com", age=18, balance=1, password="abc12345")
+    # Для админа заказы не ограничиваются владельцем
+    admin = SimpleNamespace(id=9, is_admin=True)
+    assert await get_orders(admin, service, 2, 3) == ("orders", None, 2, 3)
+    assert await get_order(admin, service, 1) == ("order", 1, None)
+    assert await delete_order(admin, service, 1) == (1, None)
+
+    user = UserCreate(name="A", email="a@test.com", age=18, password="abc12345")
     assert await register(service, user) == "a@test.com"
     assert await login.__wrapped__(SimpleNamespace(), service, SimpleNamespace(username="u")) == "u"
     assert await refresh_token(service, "refresh") == "refresh"

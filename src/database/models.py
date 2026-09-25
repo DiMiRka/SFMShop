@@ -2,8 +2,9 @@ from decimal import Decimal
 from datetime import datetime
 from typing import List
 
-from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Text, func
+from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Text, false, func
 from sqlalchemy.orm import DeclarativeBase, relationship, mapped_column, Mapped
+
 
 class Base(DeclarativeBase):
     pass
@@ -19,6 +20,7 @@ class User(Base):
     age: Mapped[int] = mapped_column(Integer, CheckConstraint("age >= 18", name="check_user_age"), nullable=False)
     balance: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), default=0.0)
     is_active: Mapped[bool] = mapped_column(default=True)
+    is_admin: Mapped[bool] = mapped_column(default=False, server_default=false(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     orders: Mapped[List["Order"]] = relationship(back_populates="user", passive_deletes=True)

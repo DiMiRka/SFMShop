@@ -5,6 +5,7 @@ from src.models.exceptions import (
     ValidationError,
     NotFoundError,
     UnauthorizedError,
+    ForbiddenError,
     BusinessLogicError
 )
 
@@ -26,6 +27,13 @@ async def validation_notfound_handler(request: Request, exc: NotFoundError):
 async def unauthorized_handler(request: Request, exc: UnauthorizedError):
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": str(exc)}
+    )
+
+
+async def forbidden_handler(request: Request, exc: ForbiddenError):
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
         content={"detail": str(exc)}
     )
 

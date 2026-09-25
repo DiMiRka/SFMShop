@@ -17,8 +17,10 @@ from src.services.log_service import configure_sentry, log_service, setup_loggin
 from src.services.queue_producer import QueueProducer
 from src.services.queue_consumer import QueueConsumer
 from src.api.exceptions import (validation_notfound_handler, validation_exception_handler,
-                                business_exception_handler, unauthorized_handler, base_exception_handler)
-from src.models.exceptions import (ValidationError, NotFoundError, BusinessLogicError, UnauthorizedError)
+                                business_exception_handler, unauthorized_handler, forbidden_handler,
+                                base_exception_handler)
+from src.models.exceptions import (ValidationError, NotFoundError, BusinessLogicError, UnauthorizedError,
+                                   ForbiddenError)
 
 
 @asynccontextmanager
@@ -133,6 +135,7 @@ sfmshop_app.add_exception_handler(
 sfmshop_app.add_exception_handler(ValidationError, cast(Any, validation_exception_handler))
 sfmshop_app.add_exception_handler(NotFoundError, cast(Any, validation_notfound_handler))
 sfmshop_app.add_exception_handler(UnauthorizedError, cast(Any, unauthorized_handler))
+sfmshop_app.add_exception_handler(ForbiddenError, cast(Any, forbidden_handler))
 sfmshop_app.add_exception_handler(BusinessLogicError, cast(Any, business_exception_handler))
 sfmshop_app.add_exception_handler(Exception, cast(Any, base_exception_handler))
 

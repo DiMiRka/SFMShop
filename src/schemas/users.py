@@ -9,8 +9,6 @@ class UserBase(Base):
     name: str = Field(..., min_length=1, max_length=20)
     email: EmailStr
     age: int = Field(..., ge=18)
-    balance: int = Field(..., ge=0)
-    is_active: bool = Field(True)
 
 
 class UserCreate(UserBase):
@@ -32,6 +30,11 @@ class UserCreate(UserBase):
 
 class UserInDB(UserBase):
     hashed_password: str
+    balance: int = Field(default=0, ge=0)
+    is_active: bool = True
+
+
+ADMIN_ONLY_USER_FIELDS = frozenset({"balance", "is_active", "is_admin"})
 
 
 class UserUpdatePatch(Base):
@@ -41,6 +44,7 @@ class UserUpdatePatch(Base):
     age: Optional[int] = Field(None, ge=18)
     balance: Optional[int] = Field(None, ge=0)
     is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
 
 
 class UserResponse(Base):
@@ -50,6 +54,7 @@ class UserResponse(Base):
     age: int
     balance: int
     is_active: bool
+    is_admin: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

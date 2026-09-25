@@ -14,6 +14,10 @@ class UnauthorizedError(SFMShopException):
     pass
 
 
+class ForbiddenError(SFMShopException):
+    pass
+
+
 class BusinessLogicError(SFMShopException):
     pass
 

@@ -4,6 +4,7 @@ from typing import List
 
 from src.schemas import OrderCreate, OrderResponse
 from src.core.dependencies import current_user, order_write_service, order_read_service
+from src.core.permissions import order_owner_filter
 
 orders_router = APIRouter(prefix="/orders", tags=['orders'])
 
@@ -11,12 +12,12 @@ orders_router = APIRouter(prefix="/orders", tags=['orders'])
 @orders_router.get("/", summary="Получить все заказы",
                    response_model=List[OrderResponse], status_code=status.HTTP_200_OK)
 async def get_orders(cu: current_user, service: order_read_service, limit: int = 100, offset: int = 0):
-    return await service.get_all_orders(cu.id, limit, offset)
+    return await service.get_all_orders(order_owner_filter(cu), limit, offset)
 
 
 @orders_router.get("/{order_id}", summary="Получить заказ", status_code=status.HTTP_200_OK)
 async def get_order(cu: current_user, service: order_read_service, order_id: int):
-    return await service.get_order_by_id(order_id, cu.id)
+    return await service.get_order_by_id(order_id, order_owner_filter(cu))
 
 
 @orders_router.post("/", summary="Создать новый заказ", status_code=status.HTTP_201_CREATED)
@@ -33,4 +34,4 @@ async def post_order(
 
 @orders_router.delete("/{order_id}", summary="Удалить заказ", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_order(cu: current_user, service: order_write_service, order_id: int):
-    return await service.delete_order(order_id, cu.id)
+    return await service.delete_order(order_id, order_owner_filter(cu))
