@@ -183,21 +183,26 @@ def test_schemas_validate_and_serialize():
         balance=100,
         password="abc12345",
     )
-    assert UserInDB(**user.model_dump(), hashed_password="hash").hashed_password == "hash"
+    # Баланс при регистрации игнорируется: новый пользователь всегда начинает с нуля
+    user_in_db = UserInDB(**user.model_dump(), hashed_password="hash")
+    assert user_in_db.hashed_password == "hash"
+    assert user_in_db.balance == 0
+    assert user_in_db.is_active is True
     assert UserUpdatePatch(name="New").model_dump(exclude_unset=True) == {"name": "New"}
     assert UserResponse(
         id=1,
         name=user.name,
         email=user.email,
         age=user.age,
-        balance=user.balance,
+        balance=0,
         is_active=True,
+        is_admin=False,
         created_at=datetime(2026, 1, 1),
     ).id == 1
     with pytest.raises(PydanticValidationError):
-        UserCreate(name="Dima", email="dima@test.com", age=31, balance=100, password="12345678")
+        UserCreate(name="Dima", email="dima@test.com", age=31, password="12345678")
     with pytest.raises(PydanticValidationError):
-        UserCreate(name="Dima", email="dima@test.com", age=31, balance=100, password="abcdefgh")
+        UserCreate(name="Dima", email="dima@test.com", age=31, password="abcdefgh")
 
     item = OrderItemBase(product_id=1, quantity=2)
     assert OrderItemsInDB(order_id=5, product_id=1, quantity=2, total=Decimal("20.00")).order_id == 5

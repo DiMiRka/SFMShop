@@ -11,6 +11,7 @@ from src.database import get_write_session, get_read_session
 from src.services.cache_service import CacheService
 from src.services.queue_producer import QueueProducer
 from src.core.security import decode_token
+from src.core.permissions import ensure_admin
 from src.schemas import TokenData
 from src.repositories import ProductRepository, OrderRepository, UserRepository
 from src.services import (ProductService, UserService, OrderService, ExchangeRateClient, MultiExchangeClient)
@@ -36,13 +37,6 @@ def get_queue(request: Request):
 
 
 queue_dependency = Annotated[QueueProducer, Depends(get_queue)]
-
-
-# def get_event_consumer(request: Request) -> QueueConsumer:
-#     return request.app.state.consumer
-#
-#
-# consumer_dependency = Annotated[QueueConsumer, Depends(get_event_consumer)]
 
 
 def get_http_client(request: Request):
@@ -90,6 +84,14 @@ async def get_current_user(db: read_db_dependency, token: str = Depends(oauth2_s
 
 
 current_user = Annotated[User, Depends(get_current_user)]
+
+
+async def get_current_admin(user: current_user) -> User:
+    ensure_admin(user)
+    return user
+
+
+admin_user = Annotated[User, Depends(get_current_admin)]
 
 
 # Repositories

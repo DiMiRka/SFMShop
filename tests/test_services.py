@@ -55,7 +55,7 @@ def db_product(product_id=1, name="Mouse", price=Decimal("10.00"), quantity=5):
 
 
 def db_user(user_id=1, name="Dima", email="dima@test.com", balance=Decimal("100.00")):
-    user = DbUser(name=name, email=email, age=30, balance=balance, hashed_password="hash", is_active=True)
+    user = DbUser(name=name, email=email, age=30, balance=balance, hashed_password="hash", is_active=True, is_admin=False)
     user.id = user_id
     user.created_at = datetime(2026, 1, 1)
     return user
@@ -225,12 +225,14 @@ async def test_user_service_success_auth_and_not_found():
         UserCreate(name="New", email="new@test.com", age=22, balance=50, password="abc12345")
     )
     assert registered["user"]["email"] == "new@test.com"
-    assert users.created["balance"] == 50
+    assert users.created["balance"] == 0
+    assert "is_admin" not in users.created
+    assert registered["user"]["is_admin"] is False
 
     users.email_user = users.user
     with pytest.raises(ValidationError):
         await service.register_user(
-            UserCreate(name="New", email="dima@test.com", age=22, balance=50, password="abc12345")
+            UserCreate(name="New", email="dima@test.com", age=22, password="abc12345")
         )
 
     users.user.hashed_password = await get_password_hash("abc12345")
@@ -315,13 +317,11 @@ async def test_order_service_hides_foreign_orders():
     service = OrderService(orders, users, products, cache, queue)
     stranger_id = 2
 
-    # Заказ id=7 принадлежит пользователю 1, чужой пользователь не должен его видеть
     with pytest.raises(NotFoundError):
         await service.get_order_by_id(7, stranger_id)
     with pytest.raises(NotFoundError):
         await service.get_all_orders(stranger_id)
 
-    # И не должен иметь возможности его удалить: ни баланс, ни склад, ни события не трогаются
     with pytest.raises(NotFoundError):
         await service.delete_order(7, stranger_id)
     assert orders.deleted is None
@@ -329,8 +329,27 @@ async def test_order_service_hides_foreign_orders():
     assert products.updated is None
     assert queue.events == []
 
-    # Кэш списка заказов разделён по пользователям
     assert ("orders:2:100:0", 900) in cache.calls
+
+
+async def test_order_service_admin_manages_any_order():
+    orders = OrderRepoFake()
+    users = UserRepoFake()
+    products = ProductRepoFake()
+    cache = FakeCache()
+    service = OrderService(orders, users, products, cache, FakeQueue())
+    all_users = None
+
+    orders.get_user_orders = None
+    assert (await service.get_all_orders(all_users))[0]["id"] == 7
+    assert ("orders:all:100:0", 900) in cache.calls
+    assert (await service.get_order_by_id(7, all_users))["user_id"] == 1
+
+    await service.delete_order(7, all_users)
+    assert orders.deleted is orders.order
+    refunded_user, data = users.updated
+    assert refunded_user.id == 1
+    assert data == {"balance": Decimal("120.00")}
 
 
 async def test_order_service_stock_balance_and_product_errors():

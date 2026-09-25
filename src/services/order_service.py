@@ -24,10 +24,13 @@ class OrderService:
         self.cache = cache
         self.queue = queue
 
-    async def get_all_orders(self, user_id: int, limit: int = 100, offset: int = 0) -> list[Order]:
+    async def get_all_orders(self, user_id: int | None, limit: int = 100, offset: int = 0) -> list[Order]:
         async def fetch():
 
-            orders = await self.order_rep.get_user_orders(user_id, limit, offset)
+            if user_id is None:
+                orders = await self.order_rep.get_all(limit, offset)
+            else:
+                orders = await self.order_rep.get_user_orders(user_id, limit, offset)
 
             if not orders:
                 raise NotFoundError("Заказов нет")
@@ -53,9 +56,10 @@ class OrderService:
 
             return orders_data
 
-        return await self.cache.get_or_set_cache(f"orders:{user_id}:{limit}:{offset}", fetch)
+        owner_key = "all" if user_id is None else user_id
+        return await self.cache.get_or_set_cache(f"orders:{owner_key}:{limit}:{offset}", fetch)
 
-    async def get_order_by_id(self, order_id: int, user_id: int) -> Order:
+    async def get_order_by_id(self, order_id: int, user_id: int | None) -> Order:
         async def fetch():
             order = await self.order_rep.get_by_id(order_id)
 
@@ -67,8 +71,7 @@ class OrderService:
 
         order_data = await self.cache.get_or_set_cache(f"order:{order_id}", fetch)
 
-        # Чужой заказ отдаём как несуществующий, чтобы не раскрывать, что такой id есть
-        if order_data["user_id"] != user_id:
+        if user_id is not None and order_data["user_id"] != user_id:
             logger.warning(f"User id={user_id} tried to access order id={order_id}")
             raise NotFoundError("Заказ не найден")
 
@@ -162,9 +165,11 @@ class OrderService:
         async with self.order_rep.db.begin():
             order = await self.order_rep.get_by_id_for_update(order_id)
 
-            if not order or order.user_id != user_id:
+            if not order or (user_id is not None and order.user_id != user_id):
                 logger.warning(f"Order id={order_id} not found for user id={user_id}")
                 raise NotFoundError("Заказ не найден")
+
+            user_id = order.user_id
 
             user_db = await self.user_rep.get_by_id_for_update(user_id)
             new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)
