@@ -24,10 +24,10 @@ class OrderService:
         self.cache = cache
         self.queue = queue
 
-    async def get_all_orders(self, limit: int = 100, offset: int = 0) -> list[Order]:
+    async def get_all_orders(self, user_id: int, limit: int = 100, offset: int = 0) -> list[Order]:
         async def fetch():
 
-            orders = await self.order_rep.get_all(limit, offset)
+            orders = await self.order_rep.get_user_orders(user_id, limit, offset)
 
             if not orders:
                 raise NotFoundError("Заказов нет")
@@ -53,9 +53,9 @@ class OrderService:
 
             return orders_data
 
-        return await self.cache.get_or_set_cache(f"orders:{limit}:{offset}", fetch)
+        return await self.cache.get_or_set_cache(f"orders:{user_id}:{limit}:{offset}", fetch)
 
-    async def get_order_by_id(self, order_id: int) -> Order:
+    async def get_order_by_id(self, order_id: int, user_id: int) -> Order:
         async def fetch():
             order = await self.order_rep.get_by_id(order_id)
 
@@ -65,9 +65,16 @@ class OrderService:
 
             return OrderResponse.model_validate(order).model_dump(mode="json")
 
-        return await self.cache.get_or_set_cache(f"order:{order_id}", fetch)
+        order_data = await self.cache.get_or_set_cache(f"order:{order_id}", fetch)
 
-    async def create_order(self, order: OrderCreate):
+        # Чужой заказ отдаём как несуществующий, чтобы не раскрывать, что такой id есть
+        if order_data["user_id"] != user_id:
+            logger.warning(f"User id={user_id} tried to access order id={order_id}")
+            raise NotFoundError("Заказ не найден")
+
+        return order_data
+
+    async def create_order(self, user_id: int, order: OrderCreate):
         if not order.items:
             raise ValidationError("Empty order")
 
@@ -82,8 +89,6 @@ class OrderService:
 
             quantity.append(item_quantity)
             product_ids.append(item.product_id)
-
-        user_id = order.user_id
 
         async with self.order_rep.db.begin():
 
@@ -153,15 +158,13 @@ class OrderService:
             "total": float(total),
         }
 
-    async def delete_order(self, order_id):
+    async def delete_order(self, order_id, user_id):
         async with self.order_rep.db.begin():
             order = await self.order_rep.get_by_id_for_update(order_id)
 
-            if not order:
-                logger.warning(f"Order id={order_id} not found")
+            if not order or order.user_id != user_id:
+                logger.warning(f"Order id={order_id} not found for user id={user_id}")
                 raise NotFoundError("Заказ не найден")
-
-            user_id = order.user_id
 
             user_db = await self.user_rep.get_by_id_for_update(user_id)
             new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)

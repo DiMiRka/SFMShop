@@ -17,11 +17,11 @@ class OrderItemsInDB(OrderItemBase):
 
 
 class OrderCreate(Base):
-    user_id: int
     items: List[OrderItemBase]
 
 
 class OrderInDB(OrderCreate):
+    user_id: int
     total: Decimal
 
 

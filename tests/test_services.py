@@ -160,7 +160,7 @@ class OrderRepoFake:
     async def get_by_id_for_update(self, order_id):
         return await self.get_by_id(order_id)
 
-    async def get_user_orders(self, user_id):
+    async def get_user_orders(self, user_id, limit=None, offset=0):
         return [self.order] if user_id == self.order.user_id else []
 
     async def get_order_ids_by_user(self, user_id):
@@ -273,37 +273,64 @@ async def test_order_service_success_and_error_paths():
     queue = FakeQueue()
     service = OrderService(orders, users, products, FakeCache(), queue)
 
-    assert (await service.get_all_orders(10, 0))[0]["items"][0]["total"] == 20.0
-    assert (await service.get_order_by_id(7))["id"] == 7
+    assert (await service.get_all_orders(1, 10, 0))[0]["items"][0]["total"] == 20.0
+    assert (await service.get_order_by_id(7, 1))["id"] == 7
 
-    order_create = OrderCreate(user_id=1, items=[OrderItemBase(product_id=1, quantity=2)])
-    created = await service.create_order(order_create)
+    order_create = OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)])
+    created = await service.create_order(1, order_create)
     assert created["order_id"] == 77
     assert created["total"] == 20.0
     assert products.product.quantity == 3
     assert users.user.balance == Decimal("80.00")
     assert orders.created_items[0]["order_id"] == 77
 
-    deleted = await service.delete_order(7)
+    deleted = await service.delete_order(7, 1)
     assert deleted["id"] == 7
     assert queue.events[-1][1] == "order.deleted"
 
-    async def empty_orders(limit=100, offset=0):
+    async def empty_orders(user_id, limit=None, offset=0):
         return []
 
-    orders.get_all = empty_orders
+    orders.get_user_orders = empty_orders
     with pytest.raises(NotFoundError):
-        await service.get_all_orders()
+        await service.get_all_orders(1)
     with pytest.raises(NotFoundError):
-        await service.get_order_by_id(999)
+        await service.get_order_by_id(999, 1)
     with pytest.raises(ValidationError):
-        await service.create_order(OrderCreate(user_id=1, items=[OrderItemBase(product_id=1, quantity=0)]))
+        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=0)]))
     with pytest.raises(NotFoundError):
-        await service.delete_order(999)
+        await service.delete_order(999, 1)
 
     users.user = None
     with pytest.raises(NotFoundError):
-        await service.create_order(order_create)
+        await service.create_order(1, order_create)
+
+
+async def test_order_service_hides_foreign_orders():
+    orders = OrderRepoFake()
+    users = UserRepoFake()
+    products = ProductRepoFake()
+    cache = FakeCache()
+    queue = FakeQueue()
+    service = OrderService(orders, users, products, cache, queue)
+    stranger_id = 2
+
+    # Заказ id=7 принадлежит пользователю 1, чужой пользователь не должен его видеть
+    with pytest.raises(NotFoundError):
+        await service.get_order_by_id(7, stranger_id)
+    with pytest.raises(NotFoundError):
+        await service.get_all_orders(stranger_id)
+
+    # И не должен иметь возможности его удалить: ни баланс, ни склад, ни события не трогаются
+    with pytest.raises(NotFoundError):
+        await service.delete_order(7, stranger_id)
+    assert orders.deleted is None
+    assert users.updated is None
+    assert products.updated is None
+    assert queue.events == []
+
+    # Кэш списка заказов разделён по пользователям
+    assert ("orders:2:100:0", 900) in cache.calls
 
 
 async def test_order_service_stock_balance_and_product_errors():
@@ -313,13 +340,13 @@ async def test_order_service_stock_balance_and_product_errors():
     service = OrderService(orders, users, products, FakeCache(), FakeQueue())
 
     with pytest.raises(NotFoundError):
-        await service.create_order(OrderCreate(user_id=1, items=[OrderItemBase(product_id=999, quantity=1)]))
+        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=999, quantity=1)]))
 
     products.product.quantity = 1
     with pytest.raises(Exception):
-        await service.create_order(OrderCreate(user_id=1, items=[OrderItemBase(product_id=1, quantity=2)]))
+        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
 
     products.product.quantity = 5
     users.user.balance = Decimal("1.00")
     with pytest.raises(BusinessLogicError):
-        await service.create_order(OrderCreate(user_id=1, items=[OrderItemBase(product_id=1, quantity=2)]))
+        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
