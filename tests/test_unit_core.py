@@ -253,5 +253,16 @@ async def test_notifications_and_api_exception_handlers(log_messages):
     assert b"boom" not in response.body
 
 
+def test_any_email_accepted_by_schema_fits_db_column():
+    from src.database.models import User as DbUser
 
+    local = "a" * 64
+    domain = ".".join(["b" * 63, "c" * 63, "d" * 57]) + ".com"
+    longest = f"{local}@{domain}"
+    assert len(longest) == 254
 
+    user = UserCreate(name="A", email=longest, age=20, password="abc12345")
+    assert len(user.email) <= DbUser.__table__.c.email.type.length
+
+    with pytest.raises(PydanticValidationError):
+        UserCreate(name="A", email="e" + longest, age=20, password="abc12345")
