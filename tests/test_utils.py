@@ -18,7 +18,7 @@ async def test_function_with_external_dependency(mock_async_client):
     client_instance.get = AsyncMock(return_value=response)
     mock_async_client.return_value = client_instance
 
-    client = ExchangeRateClient(base_url="https://rates.example.test", timeout=1, max_retries=1)
+    client = ExchangeRateClient(["https://rates.example.test"], timeout=1, max_retries=1)
     rate = await client.get_exchange_rate("USD", "RUB")
 
     assert rate == 90.0

@@ -1,10 +1,12 @@
 import json
 
+from loguru import logger
+
 
 class LoggableMixin:
     def log(self, message):
         class_name = self.__class__.__name__
-        print(f"[{class_name}] {message}")
+        logger.info(f"[{class_name}] {message}")
 
 
 class SerializableMixin:

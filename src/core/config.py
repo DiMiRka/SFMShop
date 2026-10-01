@@ -47,7 +47,6 @@ class AppSettings(BaseSettings):
     sentry_dsn: str | None = None
     debug: bool = False
 
-    exchange_api_url: str = "https://api.exchangerate-api.com/v4/latest"
     exchange_api_urls: list[str] = Field(default_factory=lambda: [
         "https://api.exchangerate-api.com/v4/latest",
         "https://api.currencyapi.com/v3/latest",

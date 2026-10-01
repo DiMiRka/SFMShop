@@ -1,4 +1,5 @@
 import httpx
+from loguru import logger
 
 
 class PaymentClient:
@@ -16,5 +17,5 @@ class PaymentClient:
                 response.raise_for_status()
                 return response.json()
         except httpx.RequestError as e:
-            print(f"Ошибка вызова payment-service: {e}")
+            logger.warning(f"payment_service_request_failed order_id={order_id} error={e!r}")
             return None

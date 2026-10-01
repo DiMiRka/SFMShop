@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+from loguru import logger
+
 
 class Notification(ABC):
     @abstractmethod
@@ -9,7 +11,7 @@ class Notification(ABC):
 
 class EmailNotification(Notification):
     async def send(self, message: str) -> str:
-        print(f"Email: {message}")
+        logger.info(f"Email: {message}")
         return f"Email: {message}"
 
 

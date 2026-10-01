@@ -174,14 +174,6 @@ async def test_dependency_factories_and_current_user(monkeypatch):
         await anext(exchange_gen)
     assert exchange_client.closed
 
-    monkeypatch.setattr(deps, "MultiExchangeClient", Client)
-    multi_gen = deps.get_multi_exchange_client()
-    multi_client = await anext(multi_gen)
-    assert isinstance(multi_client, Client)
-    with pytest.raises(StopAsyncIteration):
-        await anext(multi_gen)
-    assert multi_client.closed
-
 
 async def async_value(value):
     return value

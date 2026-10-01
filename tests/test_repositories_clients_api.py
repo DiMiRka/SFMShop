@@ -17,7 +17,6 @@ from src.repositories.product_repository import ProductRepository
 from src.repositories.user_repository import UserRepository
 from src.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 from src.services.exchange_client import ExchangeRateClient
-from src.services.multi_exchange_client import MultiExchangeClient
 
 
 pytestmark = pytest.mark.anyio
@@ -144,8 +143,10 @@ class HttpClientFake:
     def __init__(self, responses):
         self.responses = list(responses)
         self.closed = False
+        self.urls = []
 
     async def get(self, url):
+        self.urls.append(url)
         response = self.responses.pop(0)
         if isinstance(response, Exception):
             raise response
@@ -155,14 +156,25 @@ class HttpClientFake:
         self.closed = True
 
 
-async def test_exchange_clients_convert_and_handle_errors(monkeypatch):
-    async def no_sleep(delay):
-        return None
+def http_error(status=500):
+    request = httpx.Request("GET", "https://test")
+    response = httpx.Response(status, request=request)
+    return HttpResponse(error=httpx.HTTPStatusError("bad", request=request, response=response))
 
-    monkeypatch.setattr("src.services.exchange_client.asyncio.sleep", no_sleep)
-    monkeypatch.setattr("src.services.multi_exchange_client.asyncio.sleep", no_sleep)
 
-    client = ExchangeRateClient(max_retries=2)
+@pytest.fixture
+def sleeps(monkeypatch):
+    delays = []
+
+    async def fake_sleep(delay):
+        delays.append(delay)
+
+    monkeypatch.setattr("src.services.exchange_client.asyncio.sleep", fake_sleep)
+    return delays
+
+
+async def test_exchange_client_convert_and_single_provider_errors(sleeps):
+    client = ExchangeRateClient(["https://one"], max_retries=2)
     client.client = HttpClientFake([HttpResponse({"rates": {"RUB": 90}}), HttpResponse({"rates": {"RUB": 90}})])
     assert await client.get_exchange_rate("USD", "RUB") == 90
     assert await client.convert_price(2, "USD", "RUB") == 180
@@ -172,29 +184,36 @@ async def test_exchange_clients_convert_and_handle_errors(monkeypatch):
 
     client.client = HttpClientFake([HttpResponse({"rates": {}})])
     assert await client.get_exchange_rate("USD", "EUR") is None
-    client.client = HttpClientFake([httpx.ReadTimeout("timeout"), HttpResponse({"rates": {"EUR": 2}})])
-    assert await client.get_exchange_rate("USD", "EUR") == 2
-    client.client = HttpClientFake([httpx.ConnectError("boom"), httpx.ConnectError("boom")])
-    assert await client.get_exchange_rate("USD", "EUR") is None
-    request = httpx.Request("GET", "https://test")
-    response = httpx.Response(500, request=request)
-    client.client = HttpClientFake([HttpResponse(error=httpx.HTTPStatusError("bad", request=request, response=response))])
-    assert await client.get_exchange_rate("USD", "EUR") is None
     client.client = HttpClientFake([HttpResponse({"rates": {}})])
     assert await client.convert_price(2, "USD", "EUR") is None
 
-    multi = MultiExchangeClient(["https://one", "https://two"], max_retries=2)
-    multi.client = HttpClientFake([HttpResponse({"rates": {"EUR": 3}}), HttpResponse({"rates": {"EUR": 3}})])
-    assert await multi.get_exchange_rate("USD", "EUR") == 3
-    assert await multi.convert_price(2, "USD", "EUR") == 6
-    assert await multi.convert_price(2, "USD", "USD") == 2
-    await multi.close()
-    assert multi.client.closed
+    client.client = HttpClientFake([httpx.ReadTimeout("timeout"), HttpResponse({"rates": {"EUR": 2}})])
+    assert await client.get_exchange_rate("USD", "EUR") == 2
+    assert sleeps == [1.0]
 
-    multi.client = HttpClientFake([httpx.ConnectTimeout("no"), httpx.ConnectTimeout("no")])
-    assert await multi.get_exchange_rate("USD", "EUR") is None
-    multi.client = HttpClientFake([HttpResponse({"rates": {}})])
-    assert await multi.convert_price(2, "USD", "EUR") is None
+    client.client = HttpClientFake([httpx.ConnectError("boom"), httpx.ConnectError("boom")])
+    assert await client.get_exchange_rate("USD", "EUR") is None
+    client.client = HttpClientFake([http_error()])
+    assert await client.get_exchange_rate("USD", "EUR") is None
+
+
+async def test_exchange_client_falls_back_to_next_provider(sleeps):
+    client = ExchangeRateClient(["https://one", "https://two"], max_retries=2)
+
+    client.client = HttpClientFake([
+        httpx.ConnectTimeout("no"),
+        httpx.ConnectTimeout("no"),
+        HttpResponse({"rates": {"EUR": 3}}),
+    ])
+    assert await client.get_exchange_rate("USD", "EUR") == 3
+    assert client.client.urls == ["https://one/USD", "https://one/USD", "https://two/USD"]
+
+    client.client = HttpClientFake([http_error(503), HttpResponse({"rates": {"EUR": 4}})])
+    assert await client.get_exchange_rate("USD", "EUR") == 4
+    assert client.client.urls == ["https://one/USD", "https://two/USD"]
+
+    client.client = HttpClientFake([httpx.ReadTimeout("t"), httpx.ReadTimeout("t"), http_error()])
+    assert await client.get_exchange_rate("USD", "EUR") is None
 
 
 async def test_api_route_functions_delegate_to_services():
@@ -233,13 +252,13 @@ async def test_api_route_functions_delegate_to_services():
 
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(queue=object())))
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
-    # Роутеры заказов всегда передают id текущего пользователя в сервис
+
     assert await get_orders(cu, service, 2, 3) == ("orders", 1, 2, 3)
     assert await get_order(cu, service, 1) == ("order", 1, 1)
     assert await post_order(request, cu, service, order) == (1, 1)
     assert await delete_order(cu, service, 1) == (1, 1)
 
-    # Для админа заказы не ограничиваются владельцем
+
     admin = SimpleNamespace(id=9, is_admin=True)
     assert await get_orders(admin, service, 2, 3) == ("orders", None, 2, 3)
     assert await get_order(admin, service, 1) == ("order", 1, None)

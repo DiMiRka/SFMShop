@@ -109,7 +109,7 @@ async def test_cache_service_roundtrip_and_invalidation_helpers():
     assert "order:5" in redis.deleted
 
 
-def test_descriptors_models_and_mixins(capsys):
+def test_descriptors_models_and_mixins(log_messages):
     product = Product("Monitor", 100, 2)
     user = User(1, "Dima", "dima@test.com", 31, 1000)
     order = Order(user, [product])
@@ -153,7 +153,7 @@ def test_descriptors_models_and_mixins(capsys):
     assert isinstance(User.age, AgeDescriptor)
 
     LoggableMixin().log("hello")
-    assert "hello" in capsys.readouterr().out
+    assert "[LoggableMixin] hello" in log_messages
     serializable = SerializableMixin()
     serializable.name = "obj"
     assert serializable.to_dict() == {"name": "obj"}
@@ -231,9 +231,9 @@ async def test_security_tokens_and_passwords():
     assert await decode_token("not-a-token") is None
 
 
-async def test_notifications_and_api_exception_handlers(capsys):
+async def test_notifications_and_api_exception_handlers(log_messages):
     assert await EmailNotification().send("hello") == "Email: hello"
-    assert "Email: hello" in capsys.readouterr().out
+    assert "Email: hello" in log_messages
     assert await SMSNotification().send("hello") == "SMS: hello"
     assert await send_notification(SMSNotification(), "hello") is None
 

@@ -14,7 +14,7 @@ from src.core.security import decode_token
 from src.core.permissions import ensure_active, ensure_admin
 from src.schemas import TokenData
 from src.repositories import ProductRepository, OrderRepository, UserRepository
-from src.services import (ProductService, UserService, OrderService, ExchangeRateClient, MultiExchangeClient)
+from src.services import (ProductService, UserService, OrderService, ExchangeRateClient)
 from src.core.config import app_settings
 
 
@@ -195,22 +195,6 @@ order_read_service = Annotated[OrderService, Depends(get_order_read_service)]
 # ----------------------------------------------------------------------------------------------------------------------
 async def get_exchange_client():
     client = ExchangeRateClient(
-        base_url=app_settings.exchange_api_url,
-        timeout=app_settings.exchange_timeout,
-        max_retries=app_settings.exchange_max_retries,
-        backoff_base=app_settings.exchange_backoff_base,
-    )
-    try:
-        yield client
-    finally:
-        await client.close()
-
-
-exchange_client = Annotated[ExchangeRateClient, Depends(get_exchange_client)]
-
-
-async def get_multi_exchange_client():
-    client = MultiExchangeClient(
         api_urls=app_settings.exchange_api_urls,
         timeout=app_settings.exchange_timeout,
         max_retries=app_settings.exchange_max_retries,
@@ -222,4 +206,4 @@ async def get_multi_exchange_client():
         await client.close()
 
 
-multi_exchange_client = Annotated[MultiExchangeClient, Depends(get_multi_exchange_client)]
+exchange_client = Annotated[ExchangeRateClient, Depends(get_exchange_client)]
