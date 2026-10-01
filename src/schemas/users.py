@@ -46,6 +46,11 @@ class UserUpdatePatch(Base):
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
 
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: Optional[str]) -> Optional[str]:
+        return v if v is None else UserCreate.validate_password(v)
+
 
 class UserResponse(Base):
     id: int

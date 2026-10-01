@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.models.exceptions import ForbiddenError
+
 
 pytestmark = pytest.mark.anyio
 
@@ -144,10 +146,14 @@ async def test_dependency_factories_and_current_user(monkeypatch):
     order_service = await deps.get_order_write_service("order-rep", "user-rep", "product-rep", "cache", "queue")
     assert order_service.order_rep == "order-rep"
 
-    user = SimpleNamespace(id=7)
+    user = SimpleNamespace(id=7, is_active=True)
     monkeypatch.setattr(deps, "decode_token", lambda token: async_value({"sub": "7"}))
     current = await deps.get_current_user(SequenceDb(QueryResult(scalar=user)), token="token")
     assert current is user
+
+    inactive = SimpleNamespace(id=7, is_active=False)
+    with pytest.raises(ForbiddenError):
+        await deps.get_current_user(SequenceDb(QueryResult(scalar=inactive)), token="token")
 
     monkeypatch.setattr(deps, "decode_token", lambda token: async_value(None))
     with pytest.raises(Exception):

@@ -11,7 +11,7 @@ from src.database import get_write_session, get_read_session
 from src.services.cache_service import CacheService
 from src.services.queue_producer import QueueProducer
 from src.core.security import decode_token
-from src.core.permissions import ensure_admin
+from src.core.permissions import ensure_active, ensure_admin
 from src.schemas import TokenData
 from src.repositories import ProductRepository, OrderRepository, UserRepository
 from src.services import (ProductService, UserService, OrderService, ExchangeRateClient, MultiExchangeClient)
@@ -79,6 +79,8 @@ async def get_current_user(db: read_db_dependency, token: str = Depends(oauth2_s
 
     if user is None:
         raise credentials_exception
+
+    ensure_active(user)
 
     return user
 

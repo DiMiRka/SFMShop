@@ -8,6 +8,7 @@ from src.schemas import UserCreate, UserInDB, UserUpdatePatch, UserResponse, Ord
 from src.core.security import (get_password_hash, verify_password, create_access_token,
                                create_refresh_token, decode_token)
 from src.api.exceptions import ValidationError, NotFoundError, UnauthorizedError
+from src.core.permissions import ensure_active
 
 
 class UserService:
@@ -79,6 +80,8 @@ class UserService:
         if not user or not verify_password(form_data.password, user.hashed_password):
             raise UnauthorizedError("Не верный email или пароль")
 
+        ensure_active(user)
+
         access_token = await create_access_token(data={"sub": str(user.id)})
         refresh_token = await create_refresh_token(data={"sub": str(user.id)})
 
@@ -104,6 +107,8 @@ class UserService:
         if user is None:
             raise UnauthorizedError("Пользователь не найден")
 
+        ensure_active(user)
+
         new_access_token = await create_access_token(data={"sub": str(user.id)})
 
         return {
@@ -116,10 +121,13 @@ class UserService:
         user_db = await self.user_rep.get_by_id(user_id)
 
         if not user_db:
-            logger.warning(f"Product id={user_id} not found")
+            logger.warning(f"User id={user_id} not found")
             raise NotFoundError("Пользователь не найден")
 
         data = user_update.model_dump(exclude_unset=True)
+
+        if "password" in data:
+            data["hashed_password"] = await get_password_hash(data.pop("password"))
 
         await self.user_rep.update(user_db, data)
 
@@ -129,7 +137,7 @@ class UserService:
                 {"user_ids": user_id}
             )
 
-        return {"id": user_id, "message": "Товар обновлен"}
+        return {"id": user_id, "message": "Пользователь обновлен"}
 
     async def delete_user(self, user_id: int):
         async with self.user_rep.db.begin():

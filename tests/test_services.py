@@ -3,11 +3,12 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError as PydanticValidationError
 
-from src.models.exceptions import BusinessLogicError, NotFoundError, UnauthorizedError, ValidationError
+from src.models.exceptions import BusinessLogicError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
 from src.database.models import Product as DbProduct, User as DbUser
 from src.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
-from src.core.security import get_password_hash
+from src.core.security import get_password_hash, verify_password
 from src.services.order_service import OrderService
 from src.services.product_service import ProductService
 from src.services.user_service import UserService
@@ -249,7 +250,7 @@ async def test_user_service_success_auth_and_not_found():
 
     assert await service.update_user(1, UserUpdatePatch(name="Updated")) == {
         "id": 1,
-        "message": "Товар обновлен",
+        "message": "Пользователь обновлен",
     }
     assert await service.delete_user(1) == {"id": 1, "message": " Пользователь удален"}
     assert await service.get_user_balance(1) == Decimal("100.00")
@@ -266,6 +267,47 @@ async def test_user_service_success_auth_and_not_found():
         await service.get_user_balance(999)
     with pytest.raises(NotFoundError):
         await service.get_user_email(999)
+
+
+async def test_user_service_password_change_is_hashed_and_usable_for_login():
+    users = UserRepoFake()
+    service = UserService(users, OrderRepoFake(), FakeCache(), FakeQueue())
+    users.email_user = users.user
+
+    await service.update_user(1, UserUpdatePatch(password="newpass42"))
+
+    _, data = users.updated
+    assert "password" not in data
+    assert data["hashed_password"] != "newpass42"
+    assert verify_password("newpass42", users.user.hashed_password)
+    tokens = await service.authorized_user(SimpleNamespace(username="dima@test.com", password="newpass42"))
+    assert tokens["access_token"]
+
+
+async def test_user_service_inactive_user_cannot_login_or_refresh():
+    users = UserRepoFake()
+    service = UserService(users, OrderRepoFake(), FakeCache(), FakeQueue())
+    users.email_user = users.user
+    users.user.hashed_password = await get_password_hash("abc12345")
+    form = SimpleNamespace(username="dima@test.com", password="abc12345")
+    refresh_token = (await service.authorized_user(form))["refresh_token"]
+
+    users.user.is_active = False
+
+    with pytest.raises(ForbiddenError):
+        await service.authorized_user(form)
+    with pytest.raises(ForbiddenError):
+        await service.create_access_token_db(refresh_token)
+    # Без верного пароля статус аккаунта не раскрывается
+    with pytest.raises(UnauthorizedError):
+        await service.authorized_user(SimpleNamespace(username="dima@test.com", password="wrong"))
+
+
+def test_user_update_rejects_weak_password():
+    with pytest.raises(PydanticValidationError):
+        UserUpdatePatch(password="onlyletters")
+    with pytest.raises(PydanticValidationError):
+        UserUpdatePatch(password="12345678")
 
 
 async def test_order_service_success_and_error_paths():

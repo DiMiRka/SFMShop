@@ -3,6 +3,11 @@ from src.models.exceptions import ForbiddenError
 from src.schemas.users import ADMIN_ONLY_USER_FIELDS, UserUpdatePatch
 
 
+def ensure_active(user: User) -> None:
+    if not user.is_active:
+        raise ForbiddenError("Аккаунт деактивирован")
+
+
 def ensure_admin(user: User) -> None:
     if not user.is_admin:
         raise ForbiddenError("Недостаточно прав")
