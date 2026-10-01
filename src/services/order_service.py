@@ -158,7 +158,7 @@ class OrderService:
             "total": float(total),
         }
 
-    async def delete_order(self, order_id, user_id):
+    async def delete_order(self, order_id: int, user_id: int | None):
         async with self.order_rep.db.begin():
             order = await self.order_rep.get_by_id_for_update(order_id)
 
@@ -166,9 +166,14 @@ class OrderService:
                 logger.warning(f"Order id={order_id} not found for user id={user_id}")
                 raise NotFoundError("Заказ не найден")
 
-            user_id = order.user_id
+            owner_id = order.user_id
 
-            user_db = await self.user_rep.get_by_id_for_update(user_id)
+            user_db = await self.user_rep.get_by_id_for_update(owner_id)
+
+            if not user_db:
+                logger.warning(f"User id={owner_id} not found")
+                raise NotFoundError("Пользователь не найден")
+
             new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)
 
             await self.user_rep.update(user_db, new_user_data)
@@ -176,7 +181,7 @@ class OrderService:
             items = await self.order_rep.get_order_products(order_id)
 
             product_ids = [item.product_id for item in items]
-            products = await self.product_rep.get_by_ids(product_ids)
+            products = await self.product_rep.get_by_ids_for_update(product_ids)
 
             products_db = {p.id: p for p in products}
 
@@ -192,7 +197,7 @@ class OrderService:
             "order.deleted",
             {
                 "order_ids": order_id,
-                "user_ids": user_id,
+                "user_ids": owner_id,
                 "product_ids": product_ids
             }
         )

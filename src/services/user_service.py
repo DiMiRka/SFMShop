@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
 
@@ -61,7 +62,7 @@ class UserService:
             age=user.age,
             hashed_password=hashed_password
         )
-        new_user_db = await self.user_rep.create(new_user.model_dump(mode="json"))
+        new_user_db = await self.user_rep.create(new_user.model_dump())
 
         await self.queue.publish_event(
                 "user_exchange",
@@ -164,7 +165,7 @@ class UserService:
 
         return {"id": user_id, "message": " Пользователь удален"}
 
-    async def get_user_balance(self, user_id: int) -> int:
+    async def get_user_balance(self, user_id: int) -> Decimal:
         async def fetch():
             balance = await self.user_rep.get_balance(user_id)
 

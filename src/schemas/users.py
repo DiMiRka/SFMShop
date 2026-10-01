@@ -1,5 +1,6 @@
 from pydantic import EmailStr, Field, ConfigDict, field_validator
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from src.schemas.base import Base
@@ -30,7 +31,7 @@ class UserCreate(UserBase):
 
 class UserInDB(UserBase):
     hashed_password: str
-    balance: int = Field(default=0, ge=0)
+    balance: Decimal = Field(default=Decimal("0"), ge=0, max_digits=10, decimal_places=2)
     is_active: bool = True
 
 
@@ -38,12 +39,12 @@ ADMIN_ONLY_USER_FIELDS = frozenset({"balance", "is_active", "is_admin"})
 
 
 class UserUpdatePatch(Base):
-    name: Optional[str] = Field(None, min_length=1, max_length=20)
-    password: Optional[str] = Field(None, min_length=8, max_length=20)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=20)
+    password: Optional[str] = Field(default=None, min_length=8, max_length=20)
     current_password: Optional[str] = None
     email: Optional[EmailStr] = None
-    age: Optional[int] = Field(None, ge=18)
-    balance: Optional[int] = Field(None, ge=0)
+    age: Optional[int] = Field(default=None, ge=18)
+    balance: Optional[Decimal] = Field(default=None, ge=0, max_digits=10, decimal_places=2)
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
 
@@ -58,7 +59,7 @@ class UserResponse(Base):
     name: str
     email: EmailStr
     age: int
-    balance: int
+    balance: Decimal
     is_active: bool
     is_admin: bool
     created_at: datetime

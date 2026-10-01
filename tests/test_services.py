@@ -410,3 +410,33 @@ async def test_order_service_stock_balance_and_product_errors():
     users.user.balance = Decimal("1.00")
     with pytest.raises(BusinessLogicError):
         await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
+
+
+async def test_balance_with_kopecks_survives_refund_and_profile():
+    orders = OrderRepoFake()
+    orders.order.total = Decimal("20.25")
+    users = UserRepoFake()
+    users.user.balance = Decimal("100.50")
+    products = ProductRepoFake()
+
+    async def unlocked_read(ids):
+        raise AssertionError("товары при возврате на склад должны блокироваться")
+
+    products.get_by_ids = unlocked_read
+    products.get_by_ids_for_update = lambda ids: async_return([p for p in products.products if p.id in ids])
+    service = OrderService(orders, users, products, FakeCache(), FakeQueue())
+
+    await service.delete_order(7, 1)
+
+    assert users.user.balance == Decimal("120.75")
+    assert products.product.quantity == 7
+
+    user_service = UserService(users, OrderRepoFake(), FakeCache(), FakeQueue())
+    assert (await user_service.get_user_by_id(1))["balance"] == "120.75"
+    assert UserUpdatePatch(balance=Decimal("99.99")).balance == Decimal("99.99")
+    with pytest.raises(PydanticValidationError):
+        UserUpdatePatch(balance=Decimal("1.999"))
+
+
+async def async_return(value):
+    return value
