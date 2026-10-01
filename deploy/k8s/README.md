@@ -3,7 +3,10 @@
 ## Состав конфигурации
 
 - `deployment.yaml` создает `Deployment` приложения SFMShop с 3 репликами
-- `service.yaml` создает `Service` типа `LoadBalancer` для доступа к приложению на порту `8000`
+- `service.yaml` создает `Service` типа `LoadBalancer`: принимает трафик на порту `80` и передаёт его в контейнер на порт `8000`
+- `hpa.yaml` создает `HorizontalPodAutoscaler`: от 1 до 5 реплик при целевой загрузке CPU 60%
+
+Команды ниже выполняются из корня репозитория.
 
 `Service` находит pods по label `app: sfmshop`. Этот label указан и в selector Deployment, и в template подов
 
@@ -54,14 +57,13 @@ kubectl get nodes
 Сначала нужно собрать Docker образ приложения:
 
 ```powershell
-docker build -t sfmshop:latest .
+docker build -f docker/Dockerfile -t sfmshop:latest .
 ```
 
-Затем применить манифесты:
+Затем применить все манифесты:
 
 ```powershell
-kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml
+kubectl apply -f deploy/k8s/
 ```
 
 Проверить ресурсы:

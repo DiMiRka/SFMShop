@@ -228,4 +228,4 @@ mypy src/ --ignore-missing-imports
 - [message_queue_architecture.md](docs/message_queue_architecture.md): очереди сообщений
 - [microservice_architecture.md](docs/microservice_architecture.md): выделение микросервисов
 - [hosting_comparison.md](docs/hosting_comparison.md), [hosting_strategy.md](docs/hosting_strategy.md): выбор хостинга
-- [k8s_deployment.md](k8s_deployment.md): развёртывание в Kubernetes
+- [deploy/k8s](deploy/k8s): манифесты и инструкция по развёртыванию в Kubernetes

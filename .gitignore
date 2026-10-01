@@ -16,5 +16,6 @@ __pycache__/
 *.dump
 *.bak
 .coverage
+coverage.xml
 
 htmlcov/
