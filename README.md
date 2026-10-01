@@ -3,6 +3,7 @@
 [![CI/CD](https://github.com/DiMiRka/SFMShop/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/DiMiRka/SFMShop/actions/workflows/ci-cd.yml)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688)
+
 ---
 
 ## О проекте
