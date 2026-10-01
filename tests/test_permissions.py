@@ -6,12 +6,15 @@ from fastapi.testclient import TestClient
 
 from src.api.main import sfmshop_app as app
 from src.core import dependencies
+from src.core.security import pwd_context
 
 
 client = TestClient(app)
 
-USER = SimpleNamespace(id=1, is_admin=False)
-ADMIN = SimpleNamespace(id=99, is_admin=True)
+OLD_PASSWORD = "oldpass42"
+OLD_HASH = pwd_context.hash(OLD_PASSWORD)
+USER = SimpleNamespace(id=1, is_admin=False, hashed_password=OLD_HASH)
+ADMIN = SimpleNamespace(id=99, is_admin=True, hashed_password=OLD_HASH)
 
 
 def teardown_function():
@@ -135,3 +138,38 @@ def test_admin_can_change_admin_only_fields_of_any_user():
     user_id, update = service.update_user.await_args.args
     assert user_id == 2
     assert update.model_dump(exclude_unset=True) == {"balance": 500, "is_admin": True}
+
+
+@pytest.mark.parametrize("user, user_id", [(USER, 1), (ADMIN, 99)])
+@pytest.mark.parametrize("current_password", [None, "wrongpass1"])
+def test_own_password_change_requires_current_password(user, user_id, current_password):
+    service = user_service()
+    login_as(user)
+    body = {"password": "newpass42"}
+    if current_password is not None:
+        body["current_password"] = current_password
+
+    response = client.put(f"/v1/users/{user_id}", json=body)
+
+    assert response.status_code == 400
+    service.update_user.assert_not_awaited()
+
+
+def test_own_password_change_with_current_password():
+    service = user_service()
+    login_as(USER)
+
+    response = client.put("/v1/users/1", json={"password": "newpass42", "current_password": OLD_PASSWORD})
+
+    assert response.status_code == 200
+    service.update_user.assert_awaited_once()
+
+
+def test_admin_resets_another_user_password_without_current_password():
+    service = user_service()
+    login_as(ADMIN)
+
+    response = client.put("/v1/users/2", json={"password": "newpass42"})
+
+    assert response.status_code == 200
+    service.update_user.assert_awaited_once()

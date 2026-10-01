@@ -40,6 +40,7 @@ ADMIN_ONLY_USER_FIELDS = frozenset({"balance", "is_active", "is_admin"})
 class UserUpdatePatch(Base):
     name: Optional[str] = Field(None, min_length=1, max_length=20)
     password: Optional[str] = Field(None, min_length=8, max_length=20)
+    current_password: Optional[str] = None
     email: Optional[EmailStr] = None
     age: Optional[int] = Field(None, ge=18)
     balance: Optional[int] = Field(None, ge=0)

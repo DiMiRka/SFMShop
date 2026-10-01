@@ -274,10 +274,11 @@ async def test_user_service_password_change_is_hashed_and_usable_for_login():
     service = UserService(users, OrderRepoFake(), FakeCache(), FakeQueue())
     users.email_user = users.user
 
-    await service.update_user(1, UserUpdatePatch(password="newpass42"))
+    await service.update_user(1, UserUpdatePatch(password="newpass42", current_password="oldpass42"))
 
     _, data = users.updated
     assert "password" not in data
+    assert "current_password" not in data
     assert data["hashed_password"] != "newpass42"
     assert verify_password("newpass42", users.user.hashed_password)
     tokens = await service.authorized_user(SimpleNamespace(username="dima@test.com", password="newpass42"))

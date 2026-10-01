@@ -124,7 +124,7 @@ class UserService:
             logger.warning(f"User id={user_id} not found")
             raise NotFoundError("Пользователь не найден")
 
-        data = user_update.model_dump(exclude_unset=True)
+        data = user_update.model_dump(exclude_unset=True, exclude={"current_password"})
 
         if "password" in data:
             data["hashed_password"] = await get_password_hash(data.pop("password"))
