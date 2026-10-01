@@ -48,5 +48,5 @@ async def business_exception_handler(request: Request, exc: BusinessLogicError):
 async def base_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": str(exc)}
+        content={"detail": "Внутренняя ошибка сервера"}
     )

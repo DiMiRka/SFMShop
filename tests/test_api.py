@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
+from loguru import logger
 
 from src.api.main import sfmshop_app as app
 from src.core import dependencies
@@ -48,6 +49,33 @@ def test_get_products_with_mocked_service():
     assert data["total"] == 3
     assert len(data["products"]) == 3
     service.get_all_products.assert_awaited_once_with(100, 0)
+
+
+def test_unhandled_error_is_hidden_from_client_but_logged(monkeypatch):
+    monkeypatch.setattr(app, "debug", False)
+    monkeypatch.setattr(app, "middleware_stack", None)
+    service = MagicMock()
+    service.get_all_products = AsyncMock(side_effect=RuntimeError("connection to db_user:secret@postgres failed"))
+
+    async def override_product_service():
+        return service
+
+    app.dependency_overrides[dependencies.get_product_read_service] = override_product_service
+    records = []
+    handler_id = logger.add(lambda message: records.append(message.record), level="ERROR")
+    try:
+        response = TestClient(app, raise_server_exceptions=False).get("/v1/products/")
+    finally:
+        logger.remove(handler_id)
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Внутренняя ошибка сервера"}
+    assert "secret" not in response.text
+
+    failed = [r for r in records if r["message"] == "http_request_failed"]
+    assert len(failed) == 1
+    assert isinstance(failed[0]["exception"].value, RuntimeError)
+    assert failed[0]["extra"]["path"] == "/v1/products/"
 
 
 def test_create_order_with_mocked_service_and_auth():

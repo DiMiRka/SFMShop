@@ -242,12 +242,15 @@ async def test_notifications_and_api_exception_handlers(log_messages):
         (validation_notfound_handler, NotFoundError("missing"), 404),
         (unauthorized_handler, UnauthorizedError("no"), 401),
         (business_exception_handler, BusinessLogicError("conflict"), 409),
-        (base_exception_handler, Exception("boom"), 500),
     ]
     for handler, exc, status_code in cases:
         response = await handler(None, exc)
         assert response.status_code == status_code
         assert str(exc).encode() in response.body
+
+    response = await base_exception_handler(None, Exception("boom"))
+    assert response.status_code == 500
+    assert b"boom" not in response.body
 
 
 
