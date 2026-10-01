@@ -113,6 +113,23 @@ def build_order_service_with_foreign_order():
     return service, order_rep, user_rep, queue
 
 
+def test_user_without_orders_gets_empty_list():
+    order_rep = MagicMock()
+    order_rep.get_user_orders = AsyncMock(return_value=[])
+    service = OrderService(order_rep, MagicMock(), MagicMock(), PassThroughCache(), MagicMock())
+
+    async def override_order_service():
+        return service
+
+    app.dependency_overrides[dependencies.get_current_user] = override_current_user
+    app.dependency_overrides[dependencies.get_order_read_service] = override_order_service
+
+    response = client.get("/v1/orders/")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_foreign_order_is_not_visible_and_cannot_be_deleted():
     service, order_rep, user_rep, queue = build_order_service_with_foreign_order()
 

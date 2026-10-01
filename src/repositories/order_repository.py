@@ -10,7 +10,7 @@ class OrderRepository(BaseRepository):
     def __init__(self, db: AsyncSession):
         super().__init__(db)
 
-    async def get_all(self, limit: int = 100, offset: int = 0) -> list[Order] | None:
+    async def get_all(self, limit: int = 100, offset: int = 0) -> list[Order]:
         result = await self.db.execute(select(Order).options(selectinload(Order.items)).offset(offset).limit(limit))
         return list(result.scalars().all())
 

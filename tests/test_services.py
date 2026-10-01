@@ -336,8 +336,7 @@ async def test_order_service_success_and_error_paths():
         return []
 
     orders.get_user_orders = empty_orders
-    with pytest.raises(NotFoundError):
-        await service.get_all_orders(1)
+    assert await service.get_all_orders(1) == []
     with pytest.raises(NotFoundError):
         await service.get_order_by_id(999, 1)
     with pytest.raises(ValidationError):
@@ -361,8 +360,7 @@ async def test_order_service_hides_foreign_orders():
 
     with pytest.raises(NotFoundError):
         await service.get_order_by_id(7, stranger_id)
-    with pytest.raises(NotFoundError):
-        await service.get_all_orders(stranger_id)
+    assert await service.get_all_orders(stranger_id) == []
 
     with pytest.raises(NotFoundError):
         await service.delete_order(7, stranger_id)

@@ -32,9 +32,6 @@ class OrderService:
             else:
                 orders = await self.order_rep.get_user_orders(user_id, limit, offset)
 
-            if not orders:
-                raise NotFoundError("Заказов нет")
-
             orders_data = []
 
             for order in orders:
