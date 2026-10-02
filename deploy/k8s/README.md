@@ -54,16 +54,25 @@ kubectl get nodes
 
 ## Деплой
 
-Сначала нужно собрать Docker образ приложения:
+Образ собирает CI при каждом push в `master` и публикует в GitHub Container Registry
+с тегами `latest` и SHA коммита: `ghcr.io/dimirka/sfmshop`. Пакет публичный, `imagePullSecrets` не нужен.
 
-```powershell
-docker build -f docker/Dockerfile -t sfmshop:latest .
-```
-
-Затем применить все манифесты:
+Применить все манифесты:
 
 ```powershell
 kubectl apply -f deploy/k8s/
+```
+
+Выкатить конкретную версию вместо `latest`:
+
+```powershell
+kubectl set image deployment/sfmshop-deployment app=ghcr.io/dimirka/sfmshop:<sha-коммита>
+```
+
+Для локального кластера без GHCR образ можно собрать самостоятельно и указать его в `deployment.yaml`:
+
+```powershell
+docker build -f docker/Dockerfile -t sfmshop:local .
 ```
 
 Проверить ресурсы:

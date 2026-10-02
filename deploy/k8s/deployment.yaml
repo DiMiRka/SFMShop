@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: sfmshop:latest
+          image: ghcr.io/dimirka/sfmshop:latest
           ports:
             - containerPort: 8000
           env:
