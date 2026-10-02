@@ -152,14 +152,44 @@ async def test_publish_retries_with_backoff_and_reconnects(monkeypatch):
     assert json.loads(message.body) == {"order_ids": 1}
 
 
-async def test_publish_raises_after_last_retry(monkeypatch):
+async def test_publish_gives_up_without_raising_and_logs_event(monkeypatch, log_messages):
     producer, sleeps = build_producer(monkeypatch, ConnectionError("down"))
 
-    with pytest.raises(ConnectionError):
-        await producer.publish_event("order_exchange", "order.created", {})
+    assert await producer.publish_event("order_exchange", "order.created", {"order_ids": 5}) is False
 
     assert producer.exchanges["order_exchange"].publish.await_count == 3
     assert sleeps == [0.5, 1.0]
+    assert any(m.startswith("event_publish_failed") and "'order_ids': 5" in m for m in log_messages)
+
+
+async def test_unknown_exchange_is_a_programming_error(monkeypatch):
+    producer, _ = build_producer(monkeypatch, None)
+
+    with pytest.raises(ValueError):
+        await producer.publish_event("missing_exchange", "key", {})
+
+
+async def test_order_is_created_when_rabbitmq_is_down(monkeypatch):
+    async def rabbitmq_down(url):
+        raise ConnectionError("rabbitmq is down")
+
+    async def no_sleep(delay):
+        return None
+
+    monkeypatch.setattr(queue_producer.aio_pika, "connect_robust", rabbitmq_down)
+    monkeypatch.setattr(queue_producer.asyncio, "sleep", no_sleep)
+    producer = QueueProducer("amqp://test", max_retries=3)
+    assert await producer._connect() is False
+
+    orders = OrderRepoFake()
+    users = UserRepoFake()
+    service = OrderService(orders, users, ProductRepoFake(), FakeCache(), producer)
+    order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
+
+    created = await service.create_order(1, order)
+
+    assert created["order_id"] == 77
+    assert users.user.balance == Decimal("90.00")
 
 
 async def test_publish_reconnects_when_connection_is_closed(monkeypatch):

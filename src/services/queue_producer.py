@@ -6,6 +6,9 @@ from loguru import logger
 from src.core.config import app_settings
 
 
+EXCHANGES = ("user_exchange", "order_exchange", "product_exchange")
+
+
 class QueueProducer:
     _instance = None
     _lock = asyncio.Lock()
@@ -22,7 +25,7 @@ class QueueProducer:
         self.backoff_multiplier = (backoff_multiplier if backoff_multiplier is not None
                                    else app_settings.rabbitmq_backoff_multiplier)
 
-        self.connection: aio_pika.RobustConnection | None = None
+        self.connection: aio_pika.abc.AbstractRobustConnection | None = None
         self.channel: aio_pika.abc.AbstractChannel | None = None
 
         self.exchanges: dict[str, aio_pika.abc.AbstractExchange] = {}
@@ -46,22 +49,24 @@ class QueueProducer:
                 cls._instance = instance
             return cls._instance
 
-    async def _connect(self):
+    async def _connect(self) -> bool:
         try:
-            self.connection = await aio_pika.connect_robust(url=self.url)
-            self.channel = await self.connection.channel()
+            connection = await aio_pika.connect_robust(url=self.url)
+            channel = await connection.channel()
+            self.connection, self.channel = connection, channel
 
-            for name in ["user_exchange", "order_exchange", "product_exchange"]:
-                self.exchanges[name] = await self.channel.declare_exchange(
+            for name in EXCHANGES:
+                self.exchanges[name] = await channel.declare_exchange(
                     name,
                     aio_pika.ExchangeType.DIRECT,
                     durable=True
                 )
 
             logger.info("rabbitmq_connected")
+            return True
 
         except Exception as e:
-            logger.error(f"rabbitmq_connect_error error={e}")
+            logger.error(f"rabbitmq_connect_error error={e!r}")
             return False
 
     async def _ensure_connection(self):
@@ -69,13 +74,19 @@ class QueueProducer:
             logger.warning("rabbitmq_reconnecting")
             await self._connect()
 
-    async def publish_event(self, exchange: str, routing_key: str, message: dict):
-        await self._ensure_connection()
-
-        if exchange not in self.exchanges:
+    async def publish_event(self, exchange: str, routing_key: str, message: dict) -> bool:
+        if exchange not in EXCHANGES:
             raise ValueError(f"Exchange {exchange} not found")
 
         for attempt in range(self.max_retries):
+            if attempt == 0:
+                await self._ensure_connection()
+            else:
+                delay = self.base_delay * (self.backoff_multiplier ** (attempt - 1))
+                logger.warning(f"rabbitmq_publish_retry retry_in={delay} attempt={attempt + 1}/{self.max_retries}")
+                await asyncio.sleep(delay)
+                await self._connect()
+
             try:
                 await self.exchanges[exchange].publish(
                     aio_pika.Message(
@@ -85,20 +96,13 @@ class QueueProducer:
                     routing_key=routing_key
                 )
                 logger.info(f"event_published exchange={exchange} routing_key={routing_key} message={message}")
-
                 return True
 
             except Exception as e:
-                logger.error(f"event_publish_error error={e}")
+                logger.warning(f"event_publish_error attempt={attempt + 1}/{self.max_retries} error={e!r}")
 
-                if attempt == self.max_retries - 1:
-                    raise
-
-                delay = self.base_delay * (self.backoff_multiplier ** attempt)
-                logger.warning(f"rabbitmq_publish_retry retry_in={delay} attempt={attempt + 1}/{self.max_retries}")
-
-                await asyncio.sleep(delay)
-                await self._connect()
+        logger.error(f"event_publish_failed exchange={exchange} routing_key={routing_key} message={message}")
+        return False
 
     async def close(self):
         if self.connection and not self.connection.is_closed:
