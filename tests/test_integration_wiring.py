@@ -327,7 +327,7 @@ async def test_queue_producer_and_consumer_helpers(monkeypatch):
     consumer = queue_consumer.QueueConsumer(cache, "amqp://test")
     assert consumer.get_retry_count(SimpleNamespace(headers={"x-death": [{"count": 2}]})) == 2
     assert consumer.get_retry_count(SimpleNamespace(headers=None)) == 0
-    await consumer.invalidate_user_cache({"user_id": 1})
+    await consumer.invalidate_user_cache({"user_ids": 1})
     await consumer.invalidate_product_cache({"product_ids": [2]})
     await consumer.invalidate_order_cache({"user_ids": [1], "order_ids": [3]})
     assert ("users", 1) in cache.deleted

@@ -112,18 +112,18 @@ class QueueConsumer:
 
                 logger.info(f"[CACHE] {routing_key} -> {data}")
 
-                if routing_key.startswith("user."):
-                    await self.invalidate_user_cache(data)
-
-                elif routing_key.startswith("product."):
-                    await self.invalidate_product_cache(data)
-
-                elif routing_key.startswith("order.") or routing_key == "user.deleted":
+                if routing_key.startswith("order.") or routing_key == "user.deleted":
                     await asyncio.gather(
                         self.invalidate_order_cache(data),
                         self.invalidate_product_cache(data),
                         self.invalidate_user_cache(data),
                     )
+
+                elif routing_key.startswith("user."):
+                    await self.invalidate_user_cache(data)
+
+                elif routing_key.startswith("product."):
+                    await self.invalidate_product_cache(data)
             except Exception:
                 retry_count = self.get_retry_count(message)
 
@@ -135,9 +135,9 @@ class QueueConsumer:
                     logger.warning(f"[CACHE] повтор {retry_count + 1}")
 
     async def invalidate_user_cache(self, data: dict):
-        user_id = data.get("user_id", None)
+        user_ids = data.get("user_ids", None)
         logger.info("Инвалидация кэша после изменения пользователей")
-        await self.cache.delete_users(user_id)
+        await self.cache.delete_users(user_ids)
 
     async def invalidate_product_cache(self, data: dict):
         product_ids = data.get("product_ids", None)
@@ -180,7 +180,7 @@ class QueueConsumer:
         async with message.process(requeue=False):
             try:
                 data = json.loads(message.body)
-                logger.info(f"Отправка email для заказа {data.get('order_id')}")
+                logger.info(f"Отправка email для заказа {data.get('order_ids')}")
             except Exception:
                 retry_count = self.get_retry_count(message)
 
