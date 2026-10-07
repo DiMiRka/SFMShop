@@ -1,4 +1,4 @@
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 from typing import Union, AsyncGenerator
 from sqlalchemy.ext.asyncio import (async_sessionmaker, create_async_engine,
                                     AsyncSession, AsyncEngine, AsyncConnection)
@@ -41,4 +41,5 @@ engine_replica = create_async_engine(app_settings.postgres_replica_url)
 async_session = create_sessionmaker(engine)
 async_session_replica = create_sessionmaker(engine_replica)
 
-mongo_client: AsyncIOMotorClient = AsyncIOMotorClient(app_settings.mongo_url)
+def create_mongo_client(url: str) -> AsyncMongoClient:
+    return AsyncMongoClient(url, tz_aware=True, serverSelectionTimeoutMS=2000)

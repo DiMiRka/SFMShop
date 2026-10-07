@@ -29,6 +29,8 @@ class AppSettings(BaseSettings):
     redis_db: int = 0
 
     mongo_url: str = "mongodb://localhost:27017"
+    mongo_db: str = "sfmshop"
+    event_log_ttl_days: int = 90
 
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
     rabbitmq_max_retries: int = 3

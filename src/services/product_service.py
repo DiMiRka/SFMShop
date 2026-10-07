@@ -76,7 +76,7 @@ class ProductService:
         await self.queue.publish_event(
             "product_exchange",
             "product.created",
-            {}
+            {"product_ids": product_id}
         )
 
         return {"id": product_id, "message": "Товар добавлен"}

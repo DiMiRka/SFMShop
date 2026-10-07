@@ -68,7 +68,7 @@ class UserService:
         await self.queue.publish_event(
                 "user_exchange",
                 "user.created",
-                {}
+                {"user_ids": new_user_db.id}
             )
 
         return {

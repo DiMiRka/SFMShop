@@ -19,10 +19,12 @@ class HealthService:
             engines: dict[str, AsyncEngine],
             redis: Redis,
             queue: QueueProducer,
+            mongo: Any = None,
             timeout: float = CHECK_TIMEOUT):
         self.engines = engines
         self.redis = redis
         self.queue = queue
+        self.mongo = mongo
         self.timeout = timeout
 
     async def readiness(self) -> dict[str, Any]:
@@ -31,6 +33,8 @@ class HealthService:
         }
         critical["redis"] = self._redis
         optional: dict[str, Callable[[], Awaitable[Any]]] = {"rabbitmq": self._rabbitmq}
+        if self.mongo is not None:
+            optional["mongodb"] = self._mongodb
 
         checks = {**critical, **optional}
         results = await asyncio.gather(*(self._run(name, check) for name, check in checks.items()))
@@ -63,6 +67,9 @@ class HealthService:
 
     async def _redis(self) -> None:
         await cast(Awaitable[bool], self.redis.ping())
+
+    async def _mongodb(self) -> None:
+        await self.mongo.admin.command("ping")
 
     async def _rabbitmq(self) -> None:
         connection = getattr(self.queue, "connection", None)

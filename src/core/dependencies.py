@@ -20,6 +20,7 @@ from src.clients.llm import LLMClient
 from src.models.exceptions import LLMUnavailableError
 from src.services.assistant import AssistantService
 from src.services.health_service import HealthService
+from src.services.event_log_service import EventLogService
 from src.database.connection import engine, engine_replica
 
 
@@ -66,10 +67,18 @@ def get_health_service(request: Request) -> HealthService:
         engines={"postgres": engine, "postgres_replica": engine_replica},
         redis=request.app.state.redis,
         queue=request.app.state.queue,
+        mongo=request.app.state.mongo,
     )
 
 
 health_service = Annotated[HealthService, Depends(get_health_service)]
+
+
+def get_event_log_service(request: Request) -> EventLogService:
+    return EventLogService(request.app.state.events)
+
+
+event_log_service = Annotated[EventLogService, Depends(get_event_log_service)]
 
 
 # Database

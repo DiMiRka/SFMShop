@@ -31,7 +31,7 @@ REST API интернет-магазина \
 | База данных    | PostgreSQL 17, SQLAlchemy 2 (async) + asyncpg, Alembic |
 | Кэш            | Redis 7                                                |
 | Очередь        | RabbitMQ 3 (aio-pika)                                  |
-| Документы      | MongoDB 7 (Motor)                                      |
+| Журнал событий | MongoDB 7 (асинхронный PyMongo)                        |
 | Безопасность   | JWT (python-jose), argon2 (passlib), slowapi           |
 | LLM            | Claude API (официальный SDK `anthropic`, async)        |
 | Инфраструктура | Docker, Docker Compose, Kubernetes, GitHub Actions     |
@@ -56,7 +56,7 @@ flowchart LR
     Services -->|события| MQ[[RabbitMQ]]
     MQ --> Consumer
     Consumer -->|инвалидация кэша| Redis
-    App -.-> Mongo[(MongoDB)]
+    Consumer -->|журнал событий| Mongo[(MongoDB)]
 ```
 
 Запрос проходит по слоям сверху вниз: роутер проверяет токен и валидирует вход, сервис применяет бизнес-правила и работает с кэшем,
@@ -203,12 +203,18 @@ python -m scripts.make_admin admin@example.com
 |-------|---------------------|-----------------------------------------------------------------|
 | POST  | `/v1/assistant` 🔒  | Вопрос о товарах и своих заказах текстом (с rate limit)         |
 
+**Журнал событий**
+
+| Метод | Путь              | Описание                                                                                  |
+|-------|-------------------|-------------------------------------------------------------------------------------------|
+| GET   | `/v1/events/` 👑  | События из MongoDB, новые первыми; фильтры `event`, `user_id`, `order_id`, `product_id`, пагинация через `before` |
+
 **Служебные** (без префикса `/v1` и без токена)
 
-| Метод | Путь            | Описание                                                                 |
-|-------|-----------------|--------------------------------------------------------------------------|
-| GET   | `/health/live`  | Процесс жив, внешние сервисы не проверяются                              |
-| GET   | `/health/ready` | PostgreSQL, реплика и Redis доступны (иначе 503); RabbitMQ недоступен → `degraded` |
+| Метод | Путь            | Описание                                                                                      |
+|-------|-----------------|-----------------------------------------------------------------------------------------------|
+| GET   | `/health/live`  | Процесс жив, внешние сервисы не проверяются                                                   |
+| GET   | `/health/ready` | PostgreSQL, реплика и Redis доступны (иначе 503)<br/>RabbitMQ или MongoDB недоступны →  статус `degraded` |
 
 ## ИИ-ассистент
 
@@ -312,7 +318,7 @@ mypy src/ --ignore-missing-imports
 
 - [system_design.md](docs/system_design.md): общий дизайн системы
 - [framework_choice.md](docs/framework_choice.md): почему FastAPI, а не Django
-- [database.md](docs/database.md): PostgreSQL, Redis и MongoDB, репликация и шардирование
+- [database.md](docs/database.md): PostgreSQL, Redis и MongoDB (журнал событий), репликация и шардирование
 - [llm_assistant.md](docs/llm_assistant.md): ИИ-ассистент, tool calling и защита от prompt injection
 - [scalable_architecture.md](docs/scalable_architecture.md): масштабирование
 - [message_queue_architecture.md](docs/message_queue_architecture.md): очереди сообщений

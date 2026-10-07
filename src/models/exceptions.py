@@ -40,3 +40,7 @@ class ServiceUnavailableError(SFMShopException):
 
 class LLMUnavailableError(ServiceUnavailableError):
     pass
+
+
+class EventLogUnavailableError(ServiceUnavailableError):
+    pass

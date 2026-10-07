@@ -1,6 +1,8 @@
 import aio_pika
 import asyncio
 import json
+from datetime import datetime, timezone
+from uuid import uuid4
 from loguru import logger
 
 from src.core.config import app_settings
@@ -78,6 +80,9 @@ class QueueProducer:
         if exchange not in EXCHANGES:
             raise ValueError(f"Exchange {exchange} not found")
 
+        message_id = uuid4().hex
+        occurred_at = datetime.now(timezone.utc)
+
         for attempt in range(self.max_retries):
             if attempt == 0:
                 await self._ensure_connection()
@@ -91,7 +96,9 @@ class QueueProducer:
                 await self.exchanges[exchange].publish(
                     aio_pika.Message(
                         body=json.dumps(message).encode(),
-                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                        message_id=message_id,
+                        timestamp=occurred_at,
                     ),
                     routing_key=routing_key
                 )

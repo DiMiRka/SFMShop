@@ -250,9 +250,10 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
             return Queue()
 
     class Consumer:
-        def __init__(self, cache, url):
+        def __init__(self, cache, url, events=None):
             self.cache = cache
             self.url = url
+            self.events = events
 
         async def start(self):
             self.started = True
@@ -270,6 +271,27 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
     llm_client = LLMClient()
     monkeypatch.setattr(main, "create_llm_client", lambda settings: llm_client)
 
+    class Collection:
+        def __init__(self):
+            self.indexes = []
+
+        async def create_index(self, keys, **kwargs):
+            self.indexes.append((keys, kwargs))
+
+    class MongoClient:
+        def __init__(self):
+            self.collection = Collection()
+
+        def __getitem__(self, db_name):
+            self.db_name = db_name
+            return {"events": self.collection}
+
+        async def close(self):
+            self.closed = True
+
+    mongo = MongoClient()
+    monkeypatch.setattr(main, "create_mongo_client", lambda url: mongo)
+
     app = SimpleNamespace(state=SimpleNamespace())
     async with main.lifespan(app):
         assert app.state.redis.pinged
@@ -277,8 +299,20 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
         assert isinstance(app.state.cache, main.CacheService)
         assert isinstance(app.state.consumer, Consumer)
         assert app.state.llm_client is llm_client
+        assert app.state.consumer.events is app.state.events
+        assert mongo.db_name == main.app_settings.mongo_db
+        ttl_index = mongo.collection.indexes[0]
+        assert ttl_index[1]["expireAfterSeconds"] == main.app_settings.event_log_ttl_days * 86400
 
     assert llm_client.closed
+    assert mongo.closed
+
+    async def mongo_down(keys, **kwargs):
+        raise ConnectionError("mongo is down")
+
+    mongo.collection.create_index = mongo_down
+    async with main.lifespan(SimpleNamespace(state=SimpleNamespace())):
+        pass
 
     request = SimpleNamespace(method="GET", url=SimpleNamespace(path="/v1/products"))
     response = SimpleNamespace(status_code=200, headers={})

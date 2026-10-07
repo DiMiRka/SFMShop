@@ -66,7 +66,7 @@ kubectl get nodes
 | `livenessProbe` | `/health/live` | процесс отвечает; иначе Kubernetes перезапускает контейнер |
 | `readinessProbe` | `/health/ready` | PostgreSQL (primary и реплика) и Redis доступны; иначе под выводится из балансировки |
 
-RabbitMQ в readiness не критичен: при его недоступности `/health/ready` отвечает 200 со статусом `degraded`\
+RabbitMQ и MongoDB в readiness не критичны: при их недоступности `/health/ready` отвечает 200 со статусом `degraded`\
 Публикация событий best-effort, и падение брокера не должно выводить из балансировки все поды сразу
 
 ```powershell
