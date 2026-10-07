@@ -43,14 +43,35 @@ kubectl create secret generic sfmshop-secrets `
   --from-literal=RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/ `
   --from-literal=JWT_SECRET=change-me `
   --from-literal=CORS_ORIGINS='["http://localhost:3000"]' `
-  --from-literal=RATE_LIMIT_LOGIN=5/minute
+  --from-literal=RATE_LIMIT_LOGIN=5/minute `
+  --from-literal=RATE_LIMIT_STORAGE_URI=redis://redis:6379/0 `
+  --from-literal=ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+`RATE_LIMIT_STORAGE_URI` должен указывать на Redis: иначе у каждого пода свой счётчик, и при 5 подах лимит фактически в 5 раз выше\
+`ANTHROPIC_API_KEY` необязателен: без него ИИ-ассистент отвечает 503, остальное приложение работает
 
 Перед созданием Secret нужно убедиться, что выбран Kubernetes context:
 
 ```powershell
 kubectl config current-context
 kubectl get nodes
+```
+
+## Проверки здоровья
+
+| Проба | Путь | Что проверяет |
+| --- | --- | --- |
+| `startupProbe` | `/health/live` | приложение запустилось: до 60 секунд на старт, пока остальные пробы не работают |
+| `livenessProbe` | `/health/live` | процесс отвечает; иначе Kubernetes перезапускает контейнер |
+| `readinessProbe` | `/health/ready` | PostgreSQL (primary и реплика) и Redis доступны; иначе под выводится из балансировки |
+
+RabbitMQ в readiness не критичен: при его недоступности `/health/ready` отвечает 200 со статусом `degraded`\
+Публикация событий best-effort, и падение брокера не должно выводить из балансировки все поды сразу
+
+```powershell
+kubectl port-forward deployment/sfmshop-deployment 8000:8000
+curl http://localhost:8000/health/ready
 ```
 
 ## Деплой

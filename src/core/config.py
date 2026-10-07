@@ -43,6 +43,7 @@ class AppSettings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=list)
 
     rate_limit_login: str = "5/minute"
+    rate_limit_storage_uri: str = "memory://"
 
     sentry_dsn: str | None = None
     debug: bool = False

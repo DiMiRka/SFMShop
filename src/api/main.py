@@ -9,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 import uvicorn
 import time
 
+from src.api.health import health_router
 from src.api.v1 import v1_router
 from src.clients.llm import create_llm_client
 from src.core.config import app_settings, uvicorn_options
@@ -71,6 +72,7 @@ sfmshop_app = FastAPI(
 )
 
 sfmshop_app.include_router(v1_router)
+sfmshop_app.include_router(health_router)
 
 sfmshop_app.add_middleware(
     CORSMiddleware,
@@ -88,8 +90,9 @@ async def log_requests(request: Request, call_next):
     method = request.method
     client = getattr(request, "client", None)
     client_host = client.host if client else None
+    is_probe = path.startswith("/health")
 
-    log_service.info(
+    (log_service.debug if is_probe else log_service.info)(
         "http_request_started",
         method=method,
         path=path,
@@ -119,7 +122,9 @@ async def log_requests(request: Request, call_next):
         "process_time": round(process_time, 3),
     }
 
-    if response.status_code >= 500:
+    if is_probe and response.status_code < 400:
+        log_service.debug("http_request_completed", **log_fields)
+    elif response.status_code >= 500:
         log_service.error("http_request_server_error", **log_fields)
     elif response.status_code >= 400:
         log_service.warning("http_request_client_error", **log_fields)

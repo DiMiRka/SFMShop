@@ -28,6 +28,9 @@ services:
         JWT_SECRET: ${JWT_SECRET}
         CORS_ORIGINS: ${CORS_ORIGINS}
         RATE_LIMIT_LOGIN: ${RATE_LIMIT_LOGIN}
+        RATE_LIMIT_STORAGE_URI: redis://redis:6379/0
+
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

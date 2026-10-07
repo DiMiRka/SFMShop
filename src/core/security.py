@@ -33,9 +33,12 @@ async def create_refresh_token(data: dict) -> str:
     return encoded_jwt
 
 
-async def decode_token(token: str) -> dict | None:
+def decode_token_sync(token: str) -> dict | None:
     try:
-        payload = jwt.decode(token, app_settings.jwt_secret, algorithms=[app_settings.algorithm])
-        return payload
+        return jwt.decode(token, app_settings.jwt_secret, algorithms=[app_settings.algorithm])
     except JWTError:
         return None
+
+
+async def decode_token(token: str) -> dict | None:
+    return decode_token_sync(token)

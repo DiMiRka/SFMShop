@@ -200,3 +200,55 @@ def test_explicit_null_in_user_update_is_rejected():
 
     assert response.status_code == 422
     service.update_user.assert_not_awaited()
+
+
+def request_with(headers):
+    from starlette.requests import Request
+
+    raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+    return Request({"type": "http", "headers": raw, "client": ("10.0.0.7", 1234)})
+
+
+@pytest.mark.anyio
+async def test_rate_limit_key_uses_verified_user_id_or_falls_back_to_ip():
+    from jose import jwt
+
+    from src.core.limiter import user_or_ip
+    from src.core.security import create_access_token
+
+    token = await create_access_token({"sub": "42"})
+    forged = jwt.encode({"sub": "42"}, "not-the-secret", algorithm="HS256")
+
+    assert user_or_ip(request_with({"Authorization": f"Bearer {token}"})) == "user:42"
+    assert user_or_ip(request_with({"Authorization": f"Bearer {forged}"})) == "10.0.0.7"
+    assert user_or_ip(request_with({"Authorization": "Basic abc"})) == "10.0.0.7"
+    assert user_or_ip(request_with({})) == "10.0.0.7"
+
+
+def test_rate_limit_keeps_working_when_redis_is_down():
+    from fastapi import FastAPI, Request
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+
+    from src.core.limiter import create_limiter
+
+    limiter = create_limiter("redis://127.0.0.1:1/0")
+    limited_app = FastAPI()
+    limited_app.state.limiter = limiter
+    limited_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    @limited_app.get("/limited")
+    @limiter.limit("2/minute")
+    async def limited(request: Request):
+        return {"ok": True}
+
+    statuses = [TestClient(limited_app).get("/limited").status_code for _ in range(3)]
+
+    assert statuses == [200, 200, 429]
+
+
+def test_app_limiter_uses_configured_storage():
+    from src.core.config import app_settings
+    from src.core.limiter import limiter
+
+    assert limiter._storage_uri == app_settings.rate_limit_storage_uri

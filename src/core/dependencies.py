@@ -19,6 +19,8 @@ from src.core.config import app_settings
 from src.clients.llm import LLMClient
 from src.models.exceptions import LLMUnavailableError
 from src.services.assistant import AssistantService
+from src.services.health_service import HealthService
+from src.database.connection import engine, engine_replica
 
 
 def get_redis(request: Request):
@@ -57,6 +59,17 @@ def get_llm_client(request: Request) -> LLMClient:
 
 
 llm_client_dependency = Annotated[LLMClient, Depends(get_llm_client)]
+
+
+def get_health_service(request: Request) -> HealthService:
+    return HealthService(
+        engines={"postgres": engine, "postgres_replica": engine_replica},
+        redis=request.app.state.redis,
+        queue=request.app.state.queue,
+    )
+
+
+health_service = Annotated[HealthService, Depends(get_health_service)]
 
 
 # Database

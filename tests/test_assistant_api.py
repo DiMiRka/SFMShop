@@ -111,3 +111,25 @@ def test_assistant_is_rate_limited():
     statuses = [client.post("/v1/assistant", json=QUESTION).status_code for _ in range(allowed + 1)]
 
     assert statuses == [200] * allowed + [429]
+
+
+async def token_for(user_id):
+    from src.core.security import create_access_token
+
+    return await create_access_token({"sub": str(user_id)})
+
+
+@pytest.mark.anyio
+async def test_assistant_limit_is_counted_per_user_not_per_ip():
+    login()
+    app.state.llm_client = AnswerLLM()
+    allowed = parse(app_settings.rate_limit_assistant).amount
+    first = {"Authorization": f"Bearer {await token_for(1)}"}
+    second = {"Authorization": f"Bearer {await token_for(2)}"}
+
+    first_statuses = [client.post("/v1/assistant", json=QUESTION, headers=first).status_code
+                      for _ in range(allowed + 1)]
+    second_status = client.post("/v1/assistant", json=QUESTION, headers=second).status_code
+
+    assert first_statuses == [200] * allowed + [429]
+    assert second_status == 200

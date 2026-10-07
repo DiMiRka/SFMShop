@@ -17,6 +17,25 @@ spec:
           image: ghcr.io/dimirka/sfmshop:latest
           ports:
             - containerPort: 8000
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           env:
             - name: DB_HOST
               valueFrom:
@@ -108,3 +127,14 @@ spec:
                 secretKeyRef:
                   name: sfmshop-secrets
                   key: RATE_LIMIT_LOGIN
+            - name: RATE_LIMIT_STORAGE_URI
+              valueFrom:
+                secretKeyRef:
+                  name: sfmshop-secrets
+                  key: RATE_LIMIT_STORAGE_URI
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sfmshop-secrets
+                  key: ANTHROPIC_API_KEY
+                  optional: true
