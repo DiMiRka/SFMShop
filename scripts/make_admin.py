@@ -1,11 +1,11 @@
-"""Выдать или отозвать права администратора у существующего пользователя.
+"""Выдать или отозвать права администратора у существующего пользователя
 
 Запуск из корня проекта:
     python -m scripts.make_admin user@example.com
     python -m scripts.make_admin user@example.com --revoke
 
 В Docker:
-    docker compose -f docker/docker-compose.yml --env-file .env exec app python -m scripts.make_admin user@example.com
+    docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app python -m scripts.make_admin user@example.com
 """
 import argparse
 import asyncio

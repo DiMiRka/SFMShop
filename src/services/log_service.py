@@ -2,12 +2,15 @@ import logging
 import os
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 
 _is_logging_configured = False
+
+LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 
 
 class LogService:
@@ -51,7 +54,7 @@ class LogService:
 log_service = LogService()
 
 
-def setup_logging(log_dir: str = "logs") -> None:
+def setup_logging(log_dir: str | Path = LOG_DIR) -> None:
     global _is_logging_configured
 
     if _is_logging_configured:

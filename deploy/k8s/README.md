@@ -6,9 +6,10 @@
 - `service.yaml` создает `Service` типа `LoadBalancer`: принимает трафик на порту `80` и передаёт его в контейнер на порт `8000`
 - `hpa.yaml` создает `HorizontalPodAutoscaler`: от 1 до 5 реплик при целевой загрузке CPU 60%
 
-Команды ниже выполняются из корня репозитория.
+Команды ниже выполняются из корня репозитория
 
-`Service` находит pods по label `app: sfmshop`. Этот label указан и в selector Deployment, и в template подов
+`Service` находит pods по label `app: sfmshop`\
+Этот label указан и в selector Deployment, и в template подов
 
 ## Secret с переменными окружения
 
@@ -55,7 +56,8 @@ kubectl get nodes
 ## Деплой
 
 Образ собирает CI при каждом push в `master` и публикует в GitHub Container Registry
-с тегами `latest` и SHA коммита: `ghcr.io/dimirka/sfmshop`. Пакет публичный, `imagePullSecrets` не нужен.
+с тегами `latest` и SHA коммита: `ghcr.io/dimirka/sfmshop`. \
+Пакет публичный, `imagePullSecrets` не нужен
 
 Применить все манифесты:
 
@@ -72,7 +74,7 @@ kubectl set image deployment/sfmshop-deployment app=ghcr.io/dimirka/sfmshop:<sha
 Для локального кластера без GHCR образ можно собрать самостоятельно и указать его в `deployment.yaml`:
 
 ```powershell
-docker build -f docker/Dockerfile -t sfmshop:local .
+docker build -f deploy/docker/Dockerfile -t sfmshop:local .
 ```
 
 Проверить ресурсы:

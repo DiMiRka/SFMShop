@@ -1,8 +1,8 @@
 services:
   app:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -38,7 +38,7 @@ services:
       rabbitmq:
         condition: service_started
     volumes:
-      - ../src:/app/src
+      - ../../src:/app/src
 
   db:
     image: postgres:17

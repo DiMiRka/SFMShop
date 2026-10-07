@@ -365,3 +365,24 @@ def test_setup_logging_is_idempotent(monkeypatch):
     log_service.setup_logging()
 
     assert calls.count("remove") == 1
+
+
+def test_logs_are_written_to_project_root_regardless_of_cwd(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    from src.services import log_service
+
+    sinks = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(log_service.logger, "remove", lambda: None)
+    monkeypatch.setattr(log_service.logger, "add", lambda sink, **kwargs: sinks.append(sink))
+    monkeypatch.setattr(log_service, "_is_logging_configured", False)
+
+    log_service.setup_logging()
+
+    project_logs = Path(__file__).resolve().parents[1] / "logs"
+    assert {Path(sink) for sink in sinks if isinstance(sink, str)} == {
+        project_logs / "app.log",
+        project_logs / "errors_log.log",
+    }
+    assert not (tmp_path / "logs").exists()

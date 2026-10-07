@@ -83,13 +83,13 @@ cp .env.example .env
 ```
 
 ```bash
-docker compose -f docker/docker-compose.yml --env-file .env up --build
+docker compose -f deploy/docker/docker-compose.yml --env-file .env up --build
 ```
 
 После первого запуска примените миграции:
 
 ```bash
-docker compose -f docker/docker-compose.yml --env-file .env exec app alembic upgrade head
+docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app alembic upgrade head
 ```
 
 После этого доступны:
@@ -101,7 +101,7 @@ docker compose -f docker/docker-compose.yml --env-file .env exec app alembic upg
 Чтобы получить администратора, зарегистрируйте пользователя через `/v1/auth/register` и выдайте ему права:
 
 ```bash
-docker compose -f docker/docker-compose.yml --env-file .env exec app python -m scripts.make_admin admin@example.com
+docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app python -m scripts.make_admin admin@example.com
 ```
 
 ## Локальный запуск без Docker
@@ -303,9 +303,12 @@ mypy src/ --ignore-missing-imports
 Проектные заметки и архитектурные решения лежат в [`docs/`](docs):
 
 - [system_design.md](docs/system_design.md): общий дизайн системы
+- [framework_choice.md](docs/framework_choice.md): почему FastAPI, а не Django
+- [database.md](docs/database.md): PostgreSQL, Redis и MongoDB, репликация и шардирование
 - [llm_assistant.md](docs/llm_assistant.md): ИИ-ассистент, tool calling и защита от prompt injection
 - [scalable_architecture.md](docs/scalable_architecture.md): масштабирование
 - [message_queue_architecture.md](docs/message_queue_architecture.md): очереди сообщений
 - [microservice_architecture.md](docs/microservice_architecture.md): выделение микросервисов
 - [hosting_comparison.md](docs/hosting_comparison.md), [hosting_strategy.md](docs/hosting_strategy.md): выбор хостинга
+- [deploy/docker](deploy/docker): Dockerfile и Docker Compose для локального запуска
 - [deploy/k8s](deploy/k8s): манифесты и инструкция по развёртыванию в Kubernetes
