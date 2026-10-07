@@ -292,7 +292,6 @@ async def test_payment_client_success_and_request_error(monkeypatch):
     assert await PaymentClient("https://pay").process_payment(1, 10.0) is None
 
 
-
 def compiled_sql(query):
     from sqlalchemy.dialects import postgresql
 

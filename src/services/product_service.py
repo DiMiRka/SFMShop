@@ -1,5 +1,4 @@
 from decimal import Decimal
-
 from loguru import logger
 
 from src.repositories.product_repository import ProductRepository
