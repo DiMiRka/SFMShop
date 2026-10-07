@@ -263,12 +263,22 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
     monkeypatch.setattr(main, "QueueProducer", QueueProducer)
     monkeypatch.setattr(main, "QueueConsumer", Consumer)
 
+    class LLMClient:
+        async def close(self):
+            self.closed = True
+
+    llm_client = LLMClient()
+    monkeypatch.setattr(main, "create_llm_client", lambda settings: llm_client)
+
     app = SimpleNamespace(state=SimpleNamespace())
     async with main.lifespan(app):
         assert app.state.redis.pinged
         assert app.state.http_client.timeout == 5
         assert isinstance(app.state.cache, main.CacheService)
         assert isinstance(app.state.consumer, Consumer)
+        assert app.state.llm_client is llm_client
+
+    assert llm_client.closed
 
     request = SimpleNamespace(method="GET", url=SimpleNamespace(path="/v1/products"))
     response = SimpleNamespace(status_code=200, headers={})

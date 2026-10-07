@@ -10,6 +10,7 @@ import uvicorn
 import time
 
 from src.api.v1 import v1_router
+from src.clients.llm import create_llm_client
 from src.core.config import app_settings, uvicorn_options
 from src.core.limiter import limiter
 from src.services.cache_service import CacheService
@@ -18,9 +19,9 @@ from src.services.queue_producer import QueueProducer
 from src.services.queue_consumer import QueueConsumer
 from src.api.exceptions import (validation_notfound_handler, validation_exception_handler,
                                 business_exception_handler, unauthorized_handler, forbidden_handler,
-                                base_exception_handler)
+                                service_unavailable_handler, base_exception_handler)
 from src.models.exceptions import (ValidationError, NotFoundError, BusinessLogicError, UnauthorizedError,
-                                   ForbiddenError)
+                                   ForbiddenError, ServiceUnavailableError)
 
 
 @asynccontextmanager
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
         backoff_multiplier=app_settings.rabbitmq_backoff_multiplier,
     )
     app.state.cache = CacheService(app.state.redis)
+    app.state.llm_client = create_llm_client(app_settings)
 
     consumer = QueueConsumer(
         cache=app.state.cache,
@@ -56,6 +58,8 @@ async def lifespan(app: FastAPI):
 
     await app.state.redis.close()
     await app.state.http_client.aclose()
+    if app.state.llm_client is not None:
+        await app.state.llm_client.close()
     log_service.info("application_stopped")
 
 sfmshop_app = FastAPI(
@@ -137,6 +141,7 @@ sfmshop_app.add_exception_handler(NotFoundError, cast(Any, validation_notfound_h
 sfmshop_app.add_exception_handler(UnauthorizedError, cast(Any, unauthorized_handler))
 sfmshop_app.add_exception_handler(ForbiddenError, cast(Any, forbidden_handler))
 sfmshop_app.add_exception_handler(BusinessLogicError, cast(Any, business_exception_handler))
+sfmshop_app.add_exception_handler(ServiceUnavailableError, cast(Any, service_unavailable_handler))
 sfmshop_app.add_exception_handler(Exception, cast(Any, base_exception_handler))
 
 if __name__ == "__main__":

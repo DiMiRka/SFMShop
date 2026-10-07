@@ -16,6 +16,9 @@ from src.schemas import TokenData
 from src.repositories import ProductRepository, OrderRepository, UserRepository
 from src.services import (ProductService, UserService, OrderService, ExchangeRateClient)
 from src.core.config import app_settings
+from src.clients.llm import LLMClient
+from src.models.exceptions import LLMUnavailableError
+from src.services.assistant import AssistantService
 
 
 def get_redis(request: Request):
@@ -44,6 +47,16 @@ def get_http_client(request: Request):
 
 
 http_client_dependency = Annotated[httpx.AsyncClient, Depends(get_http_client)]
+
+
+def get_llm_client(request: Request) -> LLMClient:
+    client = getattr(request.app.state, "llm_client", None)
+    if client is None:
+        raise LLMUnavailableError("ИИ-ассистент не настроен")
+    return client
+
+
+llm_client_dependency = Annotated[LLMClient, Depends(get_llm_client)]
 
 
 # Database
@@ -189,6 +202,18 @@ async def get_order_read_service(
 
 order_write_service = Annotated[OrderService, Depends(get_order_write_service)]
 order_read_service = Annotated[OrderService, Depends(get_order_read_service)]
+
+
+async def get_assistant_service(
+        cu: current_user,
+        llm: llm_client_dependency,
+        products: product_read_service,
+        orders: order_read_service
+) -> AssistantService:
+    return AssistantService(cu, products, orders, llm, max_steps=app_settings.llm_max_tool_steps)
+
+
+assistant_service = Annotated[AssistantService, Depends(get_assistant_service)]
 
 
 # External clients

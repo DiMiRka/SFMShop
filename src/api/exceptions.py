@@ -6,7 +6,8 @@ from src.models.exceptions import (
     NotFoundError,
     UnauthorizedError,
     ForbiddenError,
-    BusinessLogicError
+    BusinessLogicError,
+    ServiceUnavailableError
 )
 
 
@@ -41,6 +42,13 @@ async def forbidden_handler(request: Request, exc: ForbiddenError):
 async def business_exception_handler(request: Request, exc: BusinessLogicError):
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc)}
+    )
+
+
+async def service_unavailable_handler(request: Request, exc: ServiceUnavailableError):
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": str(exc)}
     )
 
