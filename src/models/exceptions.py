@@ -32,3 +32,11 @@ class InsufficientStockError(BusinessLogicError):
 
 class InvalidOrderError(BusinessLogicError):
     pass
+
+
+class ServiceUnavailableError(SFMShopException):
+    pass
+
+
+class LLMUnavailableError(ServiceUnavailableError):
+    pass

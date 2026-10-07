@@ -56,6 +56,15 @@ class AppSettings(BaseSettings):
     exchange_max_retries: int = 3
     exchange_backoff_base: float = 2.0
 
+    llm_provider: str = "anthropic"
+    anthropic_api_key: str | None = None
+    llm_model: str = "claude-opus-5-5"
+    llm_timeout: float = 30.0
+    llm_max_retries: int = 3
+    llm_max_tool_steps: int = 5
+    llm_max_tokens: int = 4096
+    rate_limit_assistant: str = "10/minute"
+
     @property
     def postgres_url(self) -> str:
         return (f"postgresql+asyncpg://{self.db_user}:{self.db_password}@"
