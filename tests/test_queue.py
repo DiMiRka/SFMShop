@@ -1,12 +1,13 @@
 import json
-from contextlib import asynccontextmanager
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aio_pika.exceptions import MessageProcessError
+from aio_pika.message import ProcessContext
 
-from src.schemas import OrderCreate, OrderItemBase, ProductUpdate, UserUpdatePatch
+from src.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 from src.services import queue_producer
 from src.services.order_service import OrderService
 from src.services.product_service import ProductService
@@ -24,11 +25,24 @@ class FakeMessage:
         self.routing_key = routing_key
         self.body = body if isinstance(body, bytes) else json.dumps(body).encode()
         self.headers = {"x-death": [{"count": retries}]} if retries else None
-        self.reject = AsyncMock()
+        self.redelivered = False
+        self.channel = SimpleNamespace(is_closed=False)
+        self.processed = False
+        self.ack = AsyncMock(side_effect=self.settle)
+        self.reject = AsyncMock(side_effect=self.settle)
 
-    @asynccontextmanager
-    async def process(self, requeue=False):
-        yield
+    async def settle(self, *args, **kwargs):
+        if self.processed:
+            raise MessageProcessError("Message already processed", self)
+        self.processed = True
+
+    def process(self, requeue=False, reject_on_redelivered=False, ignore_processed=False):
+        return ProcessContext(
+            self,
+            requeue=requeue,
+            reject_on_redelivered=reject_on_redelivered,
+            ignore_processed=ignore_processed,
+        )
 
 
 def build_consumer():
@@ -106,11 +120,13 @@ async def test_broken_message_is_retried_then_moved_to_error_queue(method, queue
     retried = FakeMessage("order.created", b"not json", retries=1)
     await getattr(consumer, method)(retried)
     retried.reject.assert_awaited_once_with(requeue=False)
+    retried.ack.assert_not_awaited()
     error_exchange.publish.assert_not_awaited()
 
     exhausted = FakeMessage("order.created", b"not json", retries=consumer.max_retries)
     await getattr(consumer, method)(exhausted)
     exhausted.reject.assert_not_awaited()
+    exhausted.ack.assert_awaited_once()
     error_exchange.publish.assert_awaited_once()
     assert error_exchange.publish.await_args.kwargs["routing_key"] == f"{queue_name}.error"
 
@@ -211,3 +227,55 @@ async def test_get_instance_connects_once_and_reuses_producer(monkeypatch):
 
     assert first is second
     connect.assert_awaited_once()
+
+
+class TransactionLog:
+    def __init__(self):
+        self.entries = []
+
+    def begin(self):
+        log = self
+
+        class Transaction:
+            async def __aenter__(self):
+                log.entries.append("begin")
+
+            async def __aexit__(self, exc_type, exc, tb):
+                log.entries.append("commit" if exc_type is None else "rollback")
+                return False
+
+        return Transaction()
+
+    async def publish_event(self, exchange, routing_key, message):
+        self.entries.append(f"publish {routing_key}")
+        return True
+
+
+def services_on(log):
+    products, users, orders = ProductRepoFake(), UserRepoFake(), OrderRepoFake()
+    for repo in (products, users, orders):
+        repo.db = log
+    return (
+        ProductService(products, FakeCache(), log),
+        UserService(users, orders, FakeCache(), log),
+        OrderService(orders, users, products, FakeCache(), log),
+    )
+
+
+@pytest.mark.parametrize("routing_key, operation", [
+    ("product.created", lambda p, u, o: p.create_product(ProductCreate(name="Desk", price=Decimal("10.00"), quantity=1))),
+    ("product.updated", lambda p, u, o: p.update_product(1, ProductUpdate(quantity=2))),
+    ("product.deleted", lambda p, u, o: p.delete_product(1)),
+    ("user.created", lambda p, u, o: u.register_user(
+        UserCreate(name="New", email="new@test.com", age=20, password="abc12345"))),
+    ("user.updated", lambda p, u, o: u.update_user(1, UserUpdatePatch(name="Changed"))),
+    ("user.deleted", lambda p, u, o: u.delete_user(1)),
+    ("order.created", lambda p, u, o: o.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]))),
+    ("order.deleted", lambda p, u, o: o.delete_order(7, 1)),
+])
+async def test_event_is_published_only_after_commit(routing_key, operation):
+    log = TransactionLog()
+
+    await operation(*services_on(log))
+
+    assert log.entries == ["begin", "commit", f"publish {routing_key}"]

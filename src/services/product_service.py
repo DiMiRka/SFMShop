@@ -69,7 +69,9 @@ class ProductService:
 
     async def create_product(self, product: ProductCreate):
         data = product.model_dump(mode="json")
-        product_id = await self.product_rep.create(data)
+
+        async with self.product_rep.db.begin():
+            product_id = await self.product_rep.create(data)
 
         await self.queue.publish_event(
             "product_exchange",
@@ -80,15 +82,16 @@ class ProductService:
         return {"id": product_id, "message": "Товар добавлен"}
 
     async def update_product(self, product_id: int, product_update: ProductUpdate):
-        product_db = await self.product_rep.get_by_id(product_id)
+        async with self.product_rep.db.begin():
+            product_db = await self.product_rep.get_by_id(product_id)
 
-        if not product_db:
-            logger.warning(f"Product id={product_id} not found")
-            raise NotFoundError("Товар не найден")
+            if not product_db:
+                logger.warning(f"Product id={product_id} not found")
+                raise NotFoundError("Товар не найден")
 
-        data = product_update.model_dump(exclude_unset=True)
+            data = product_update.model_dump(exclude_unset=True)
 
-        await self.product_rep.update(product_db, data)
+            await self.product_rep.update(product_db, data)
 
         await self.queue.publish_event(
             "product_exchange",

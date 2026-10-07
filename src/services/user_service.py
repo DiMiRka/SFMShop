@@ -50,19 +50,20 @@ class UserService:
         return await self.cache.get_or_set_cache(f"user:{user_id}", fetch)
 
     async def register_user(self, user: UserCreate):
-        user_db = await self.user_rep.get_by_email(str(user.email))
+        async with self.user_rep.db.begin():
+            user_db = await self.user_rep.get_by_email(str(user.email))
 
-        if user_db:
-            raise ValidationError("Email уже зарегистрирован")
+            if user_db:
+                raise ValidationError("Email уже зарегистрирован")
 
-        hashed_password = await get_password_hash(user.password)
-        new_user = UserInDB(
-            name=user.name,
-            email=user.email,
-            age=user.age,
-            hashed_password=hashed_password
-        )
-        new_user_db = await self.user_rep.create(new_user.model_dump())
+            hashed_password = await get_password_hash(user.password)
+            new_user = UserInDB(
+                name=user.name,
+                email=user.email,
+                age=user.age,
+                hashed_password=hashed_password
+            )
+            new_user_db = await self.user_rep.create(new_user.model_dump())
 
         await self.queue.publish_event(
                 "user_exchange",
@@ -119,18 +120,19 @@ class UserService:
         }
 
     async def update_user(self, user_id: int, user_update: UserUpdatePatch):
-        user_db = await self.user_rep.get_by_id(user_id)
+        async with self.user_rep.db.begin():
+            user_db = await self.user_rep.get_by_id(user_id)
 
-        if not user_db:
-            logger.warning(f"User id={user_id} not found")
-            raise NotFoundError("Пользователь не найден")
+            if not user_db:
+                logger.warning(f"User id={user_id} not found")
+                raise NotFoundError("Пользователь не найден")
 
-        data = user_update.model_dump(exclude_unset=True, exclude={"current_password"})
+            data = user_update.model_dump(exclude_unset=True, exclude={"current_password"})
 
-        if "password" in data:
-            data["hashed_password"] = await get_password_hash(data.pop("password"))
+            if "password" in data:
+                data["hashed_password"] = await get_password_hash(data.pop("password"))
 
-        await self.user_rep.update(user_db, data)
+            await self.user_rep.update(user_db, data)
 
         await self.queue.publish_event(
                 "user_exchange",

@@ -105,7 +105,7 @@ class QueueConsumer:
         await queue.consume(self.process_cache_event)
 
     async def process_cache_event(self, message: aio_pika.IncomingMessage):
-        async with message.process(requeue=False):
+        async with message.process(requeue=False, ignore_processed=True):
             try:
                 data = json.loads(message.body)
                 routing_key = message.routing_key or ""
@@ -177,7 +177,7 @@ class QueueConsumer:
         await queue.consume(self.process_notification)
 
     async def process_notification(self, message: aio_pika.IncomingMessage):
-        async with message.process(requeue=False):
+        async with message.process(requeue=False, ignore_processed=True):
             try:
                 data = json.loads(message.body)
                 logger.info(f"Отправка email для заказа {data.get('order_ids')}")
