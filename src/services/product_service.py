@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from loguru import logger
 
 from src.repositories.product_repository import ProductRepository
@@ -49,6 +51,22 @@ class ProductService:
             return ProductResponse.model_validate(product).model_dump(mode="json")
 
         return await self.cache.get_or_set_cache(f"product:{product_id}", fetch)
+
+    async def search_products(
+            self,
+            name_query: str | None = None,
+            min_price: Decimal | None = None,
+            max_price: Decimal | None = None,
+            in_stock: bool = False,
+            limit: int = 10) -> list[dict]:
+        products = await self.product_rep.search(
+            name_query=name_query,
+            min_price=min_price,
+            max_price=max_price,
+            in_stock=in_stock,
+            limit=limit,
+        )
+        return [ProductResponse.model_validate(product).model_dump(mode="json") for product in products]
 
     async def create_product(self, product: ProductCreate):
         data = product.model_dump(mode="json")

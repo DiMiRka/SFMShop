@@ -10,8 +10,14 @@ class OrderRepository(BaseRepository):
     def __init__(self, db: AsyncSession):
         super().__init__(db)
 
-    async def get_all(self, limit: int = 100, offset: int = 0) -> list[Order]:
-        result = await self.db.execute(select(Order).options(selectinload(Order.items)).offset(offset).limit(limit))
+    async def get_all(self, limit: int = 100, offset: int = 0, newest_first: bool = False) -> list[Order]:
+        result = await self.db.execute(
+            select(Order)
+            .options(selectinload(Order.items))
+            .order_by(Order.id.desc() if newest_first else Order.id)
+            .offset(offset)
+            .limit(limit)
+        )
         return list(result.scalars().all())
 
     async def get_by_id(self, order_id: int) -> Order | None:
@@ -31,12 +37,17 @@ class OrderRepository(BaseRepository):
         result = await self.db.execute(select(OrderItem).where(OrderItem.order_id == order_id))
         return list(result.scalars().all())
 
-    async def get_user_orders(self, user_id: int, limit: int | None = None, offset: int = 0) -> list[Order]:
+    async def get_user_orders(
+            self,
+            user_id: int,
+            limit: int | None = None,
+            offset: int = 0,
+            newest_first: bool = False) -> list[Order]:
         result = await self.db.execute(
             select(Order)
             .options(selectinload(Order.items))
             .where(Order.user_id == user_id)
-            .order_by(Order.id)
+            .order_by(Order.id.desc() if newest_first else Order.id)
             .offset(offset)
             .limit(limit)
         )

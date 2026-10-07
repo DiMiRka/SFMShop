@@ -4,7 +4,6 @@ from loguru import logger
 from src.repositories import OrderRepository, UserRepository, ProductRepository
 from src.services.cache_service import CacheService
 from src.services.queue_producer import QueueProducer
-from src.database.models import Order
 from src.schemas import (OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate,
                          OrderInDB, OrderItemsInDB)
 from src.models.exceptions import InsufficientStockError, BusinessLogicError, NotFoundError, ValidationError
@@ -24,13 +23,18 @@ class OrderService:
         self.cache = cache
         self.queue = queue
 
-    async def get_all_orders(self, user_id: int | None, limit: int = 100, offset: int = 0) -> list[Order]:
+    async def get_all_orders(
+            self,
+            user_id: int | None,
+            limit: int = 100,
+            offset: int = 0,
+            newest_first: bool = False) -> list[dict]:
         async def fetch():
 
             if user_id is None:
-                orders = await self.order_rep.get_all(limit, offset)
+                orders = await self.order_rep.get_all(limit, offset, newest_first=newest_first)
             else:
-                orders = await self.order_rep.get_user_orders(user_id, limit, offset)
+                orders = await self.order_rep.get_user_orders(user_id, limit, offset, newest_first=newest_first)
 
             orders_data = []
 
@@ -54,9 +58,10 @@ class OrderService:
             return orders_data
 
         owner_key = "all" if user_id is None else user_id
-        return await self.cache.get_or_set_cache(f"orders:{owner_key}:{limit}:{offset}", fetch)
+        order_key = ":desc" if newest_first else ""
+        return await self.cache.get_or_set_cache(f"orders:{owner_key}:{limit}:{offset}{order_key}", fetch)
 
-    async def get_order_by_id(self, order_id: int, user_id: int | None) -> Order:
+    async def get_order_by_id(self, order_id: int, user_id: int | None) -> dict:
         async def fetch():
             order = await self.order_rep.get_by_id(order_id)
 

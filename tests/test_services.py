@@ -152,7 +152,7 @@ class OrderRepoFake:
         self.created_items = []
         self.deleted = None
 
-    async def get_all(self, limit=100, offset=0):
+    async def get_all(self, limit=100, offset=0, newest_first=False):
         return [self.order]
 
     async def get_by_id(self, order_id):
@@ -161,7 +161,7 @@ class OrderRepoFake:
     async def get_by_id_for_update(self, order_id):
         return await self.get_by_id(order_id)
 
-    async def get_user_orders(self, user_id, limit=None, offset=0):
+    async def get_user_orders(self, user_id, limit=None, offset=0, newest_first=False):
         return [self.order] if user_id == self.order.user_id else []
 
     async def get_order_ids_by_user(self, user_id):
@@ -333,7 +333,7 @@ async def test_order_service_success_and_error_paths():
     assert deleted["id"] == 7
     assert queue.events[-1][1] == "order.deleted"
 
-    async def empty_orders(user_id, limit=None, offset=0):
+    async def empty_orders(user_id, limit=None, offset=0, newest_first=False):
         return []
 
     orders.get_user_orders = empty_orders
@@ -440,3 +440,22 @@ async def test_balance_with_kopecks_survives_refund_and_profile():
 
 async def async_return(value):
     return value
+
+
+async def test_product_search_passes_filters_and_serializes_out_of_stock_product():
+    class SearchRepo(ProductRepoFake):
+        async def search(self, **filters):
+            self.filters = filters
+            return [db_product(2, "Cable", Decimal("150.50"), 0)]
+
+    repo = SearchRepo()
+    service = ProductService(repo, FakeCache(), FakeQueue())
+
+    result = await service.search_products("cab", Decimal("100"), None, False, 3)
+
+    assert repo.filters == {
+        "name_query": "cab", "min_price": Decimal("100"), "max_price": None, "in_stock": False, "limit": 3,
+    }
+    assert result == [{
+        "id": 2, "name": "Cable", "price": "150.50", "quantity": 0, "created_at": "2026-01-01T00:00:00",
+    }]

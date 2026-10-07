@@ -24,6 +24,7 @@ class ProductUpdate(Base):
 
 class ProductResponse(ProductBase):
     id: int
+    quantity: int = Field(..., ge=0)
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

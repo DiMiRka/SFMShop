@@ -1,9 +1,12 @@
+from decimal import Decimal
 from typing import cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from src.repositories.base_repository import BaseRepository
 from src.database.models import Product
+
+SEARCH_LIMIT_MAX = 20
 
 
 class ProductRepository(BaseRepository):
@@ -21,6 +24,29 @@ class ProductRepository(BaseRepository):
     async def get_by_id(self, product_id: int) -> Product | None:
         result = await self.db.execute(select(Product).where(Product.id == product_id))
         return result.scalar_one_or_none()
+
+    async def search(
+            self,
+            name_query: str | None = None,
+            min_price: Decimal | None = None,
+            max_price: Decimal | None = None,
+            in_stock: bool = False,
+            limit: int = 10) -> list[Product]:
+        query = select(Product)
+
+        if name_query:
+            escaped = name_query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.where(Product.name.ilike(f"%{escaped}%", escape="\\"))
+        if min_price is not None:
+            query = query.where(Product.price >= min_price)
+        if max_price is not None:
+            query = query.where(Product.price <= max_price)
+        if in_stock:
+            query = query.where(Product.quantity > 0)
+
+        limit = max(1, min(limit, SEARCH_LIMIT_MAX))
+        result = await self.db.execute(query.order_by(Product.price, Product.id).limit(limit))
+        return list(result.scalars().all())
 
     async def get_by_ids_for_update(self, ids: list[int]) -> list[Product]:
         result = await self.db.execute(

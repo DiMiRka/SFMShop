@@ -291,3 +291,58 @@ async def test_payment_client_success_and_request_error(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", ErrorClient)
     assert await PaymentClient("https://pay").process_payment(1, 10.0) is None
 
+
+
+def compiled_sql(query):
+    from sqlalchemy.dialects import postgresql
+
+    compiled = query.compile(dialect=postgresql.dialect())
+    return str(compiled), compiled.params
+
+
+async def test_product_search_applies_filters_and_escapes_wildcards():
+    product = DbProduct(name="Mouse", price=Decimal("10.00"), quantity=3)
+    db = RepoDb(ExecuteResult([product]))
+    repo = ProductRepository(db)
+
+    result = await repo.search(
+        name_query="50%_off",
+        min_price=Decimal("100.00"),
+        max_price=Decimal("5000.00"),
+        in_stock=True,
+        limit=5,
+    )
+
+    assert result == [product]
+    sql, params = compiled_sql(db.query)
+    assert "products.name ILIKE" in sql and "ESCAPE" in sql
+    assert "products.price >=" in sql and "products.price <=" in sql
+    assert "products.quantity >" in sql
+    assert r"%50\%\_off%" in params.values()
+    assert Decimal("100.00") in params.values() and Decimal("5000.00") in params.values()
+    assert params["param_1"] == 5
+
+
+async def test_product_search_without_filters_caps_limit():
+    db = RepoDb(ExecuteResult([]))
+    repo = ProductRepository(db)
+
+    assert await repo.search(limit=1000) == []
+
+    sql, params = compiled_sql(db.query)
+    assert "WHERE" not in sql
+    assert params["param_1"] == 20
+
+
+async def test_order_lists_can_be_sorted_newest_first():
+    db = RepoDb(ExecuteResult([]))
+    repo = OrderRepository(db)
+
+    await repo.get_user_orders(1, 5, newest_first=True)
+    assert "ORDER BY orders.id DESC" in compiled_sql(db.query)[0]
+
+    await repo.get_all(5, newest_first=True)
+    assert "ORDER BY orders.id DESC" in compiled_sql(db.query)[0]
+
+    await repo.get_user_orders(1, 5)
+    assert "ORDER BY orders.id DESC" not in compiled_sql(db.query)[0]
