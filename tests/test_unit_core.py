@@ -11,6 +11,7 @@ from src.api.exceptions import (
     validation_exception_handler,
     validation_notfound_handler,
 )
+from src.core.config import app_settings
 from src.core.security import (
     create_access_token,
     create_refresh_token,
@@ -266,3 +267,77 @@ def test_any_email_accepted_by_schema_fits_db_column():
 
     with pytest.raises(PydanticValidationError):
         UserCreate(name="A", email="e" + longest, age=20, password="abc12345")
+
+
+def test_any_product_name_accepted_by_schema_fits_db_column():
+    from src.database.models import Product as DbProduct
+
+    longest = "x" * 200
+    column_length = DbProduct.__table__.c.name.type.length
+
+    assert len(ProductCreate(name=longest, price=Decimal("1.00"), quantity=1).name) <= column_length
+    assert len(ProductUpdate(name=longest).name) <= column_length
+
+    with pytest.raises(PydanticValidationError):
+        ProductCreate(name=longest + "x", price=Decimal("1.00"), quantity=1)
+    with pytest.raises(PydanticValidationError):
+        ProductUpdate(name=longest + "x")
+
+
+@pytest.mark.parametrize("data", [
+    {"price": "-1.00"},
+    {"price": "0"},
+    {"price": "1.001"},
+    {"quantity": -1},
+    {"name": ""},
+    {"name": None},
+    {"price": None},
+    {"quantity": None},
+])
+def test_product_update_rejects_invalid_values(data):
+    with pytest.raises(PydanticValidationError):
+        ProductUpdate.model_validate(data)
+
+
+def test_product_create_rejects_non_positive_price():
+    for price in ("0", "-5.00"):
+        with pytest.raises(PydanticValidationError):
+            ProductCreate(name="Desk", price=Decimal(price), quantity=1)
+
+
+def test_product_update_allows_restock_above_create_limit():
+    assert ProductUpdate(quantity=150).model_dump(exclude_unset=True) == {"quantity": 150}
+    assert ProductUpdate(quantity=0).quantity == 0
+
+
+def test_user_patch_rejects_explicit_nulls_except_current_password():
+    for field in ("name", "email", "age", "balance", "is_active", "is_admin", "password"):
+        with pytest.raises(PydanticValidationError):
+            UserUpdatePatch.model_validate({field: None})
+
+    assert UserUpdatePatch.model_validate({"name": "New", "current_password": None}).name == "New"
+
+
+def test_product_response_accepts_existing_zero_price_and_stock():
+    from src.database.models import Product as DbProduct
+
+    product = DbProduct(name="Old", price=Decimal("0.00"), quantity=0)
+    product.id = 1
+    product.created_at = datetime(2026, 1, 1)
+
+    assert ProductResponse.model_validate(product).price == Decimal("0.00")
+
+
+async def test_tokens_are_created_without_deprecated_utcnow():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        access = await create_access_token({"sub": "1"})
+        refresh = await create_refresh_token({"sub": "1"})
+
+    now = datetime.now().timestamp()
+    access_exp = (await decode_token(access))["exp"]
+    refresh_exp = (await decode_token(refresh))["exp"]
+    assert abs(access_exp - now - app_settings.access_token_expire_minutes * 60) < 5
+    assert abs(refresh_exp - now - app_settings.refresh_token_expire_days * 86400) < 5

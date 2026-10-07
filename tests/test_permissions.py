@@ -173,3 +173,30 @@ def test_admin_resets_another_user_password_without_current_password():
 
     assert response.status_code == 200
     service.update_user.assert_awaited_once()
+
+
+@pytest.mark.parametrize("body", [
+    {"price": None},
+    {"name": None},
+    {"price": "-10.00"},
+    {"quantity": -1},
+    {"name": "x" * 201},
+])
+def test_invalid_product_update_is_rejected_before_service(body):
+    service = product_service()
+    login_as(ADMIN)
+
+    response = client.put("/v1/products/1", json=body)
+
+    assert response.status_code == 422
+    service.update_product.assert_not_awaited()
+
+
+def test_explicit_null_in_user_update_is_rejected():
+    service = user_service()
+    login_as(USER)
+
+    response = client.put("/v1/users/1", json={"name": None})
+
+    assert response.status_code == 422
+    service.update_user.assert_not_awaited()

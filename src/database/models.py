@@ -31,7 +31,7 @@ class Product(Base):
     __tablename__ = 'products'
 
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(20), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
     price: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

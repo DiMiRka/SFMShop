@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from src.schemas.base import Base
+from src.schemas.base import Base, PatchBase
 
 
 class UserBase(Base):
@@ -38,7 +38,9 @@ class UserInDB(UserBase):
 ADMIN_ONLY_USER_FIELDS = frozenset({"balance", "is_active", "is_admin"})
 
 
-class UserUpdatePatch(Base):
+class UserUpdatePatch(PatchBase):
+    nullable_fields = frozenset({"current_password"})
+
     name: Optional[str] = Field(default=None, min_length=1, max_length=20)
     password: Optional[str] = Field(default=None, min_length=8, max_length=20)
     current_password: Optional[str] = None
