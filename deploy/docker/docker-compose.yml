@@ -98,6 +98,29 @@ services:
       - ../prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     depends_on:
       - app
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    ports:
+      - "9093:9093"
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        config=default;
+        if [ -n "$$TELEGRAM_BOT_TOKEN" ] && [ -n "$$TELEGRAM_CHAT_ID" ]; then
+        umask 077 && mkdir -p /tmp/telegram &&
+        printf '%s' "$$TELEGRAM_BOT_TOKEN" > /tmp/telegram/bot_token &&
+        printf '%s' "$$TELEGRAM_CHAT_ID" > /tmp/telegram/chat_id &&
+        config=telegram; fi;
+        echo "alertmanager config: $$config";
+        exec /bin/alertmanager --config.file=/etc/alertmanager/$$config.yml --storage.path=/alertmanager
+    volumes:
+      - ../alertmanager:/etc/alertmanager:ro
 
   grafana:
     image: grafana/grafana:13.2.3

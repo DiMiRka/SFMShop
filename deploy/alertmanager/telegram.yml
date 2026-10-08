@@ -1,0 +1,22 @@
+route:
+  receiver: telegram
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: telegram
+    telegram_configs:
+      - bot_token_file: /tmp/telegram/bot_token
+        chat_id_file: /tmp/telegram/chat_id
+        send_resolved: true
+        parse_mode: HTML
+        message: |-
+          {{ if eq .Status "firing" }}🔴{{ else }}✅{{ end }} <b>{{ .CommonLabels.alertname }}</b>{{ if eq .Status "resolved" }}: проблема устранена{{ end }}
+          {{ range .Alerts }}{{ if eq $.Status "resolved" }}Было: {{ end }}{{ .Annotations.summary }}
+          {{ end }}Важность: {{ .CommonLabels.severity }}
+
+inhibit_rules:
+  - source_matchers: [alertname="SFMShopDown"]
+    target_matchers: [severity="warning"]

@@ -1,0 +1,13 @@
+route:
+  receiver: ui-only
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: ui-only
+
+inhibit_rules:
+  - source_matchers: [alertname="SFMShopDown"]
+    target_matchers: [severity="warning"]

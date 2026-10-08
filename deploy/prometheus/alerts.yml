@@ -1,6 +1,14 @@
 groups:
   - name: sfmshop
     rules:
+      - alert: SFMShopDown
+        expr: up{job="sfmshop"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Приложение не отвечает: Prometheus не может забрать метрики"
+
       - alert: SFMShopHighErrorRate
         expr: |
           sum(rate(sfmshop_http_requests_total{status=~"5.."}[5m]))

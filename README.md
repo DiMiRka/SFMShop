@@ -37,7 +37,7 @@ REST API интернет-магазина \
 | LLM            | Claude API (официальный SDK `anthropic`, async)        |
 | Инфраструктура | Docker, Docker Compose, Kubernetes, GitHub Actions     |
 | Качество       | pytest, pytest-cov, ruff, mypy, Codecov                |
-| Мониторинг     | Prometheus (prometheus_client), Grafana, Sentry        |
+| Мониторинг     | Prometheus (prometheus_client), Grafana, Alertmanager, Sentry |
 
 ## Архитектура
 
@@ -104,6 +104,17 @@ docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app alem
 - Prometheus с правилами алертов: http://localhost:9090
 - Grafana с дашбордом «Состояние сервиса»: http://localhost:3001 (просмотр без входа; для правки вход `admin` / `GRAFANA_ADMIN_PASSWORD`, по умолчанию `admin`)\
   Дашборд хранится в `deploy/grafana/dashboards/sfmshop-service.json` (после правки файла выполните `docker compose ... restart grafana`)
+- Alertmanager: http://localhost:9093 (сработавшие алерты; уведомления в Telegram включаются, см. ниже)
+
+**Уведомления в Telegram.** Без настройки алерты видны только в интерфейсе Alertmanager. Чтобы получать их в Telegram:
+
+1. Создайте бота через [@BotFather](https://t.me/BotFather) и сохраните токен
+2. Напишите боту любое сообщение, затем откройте `https://api.telegram.org/bot<токен>/getUpdates` и возьмите `chat.id`
+3. Впишите их в `.env`: `TELEGRAM_BOT_TOKEN=<токен>` и `TELEGRAM_CHAT_ID=<id чата>`
+4. Пересоздайте Alertmanager, чтобы он получил новые переменные: `docker compose -f deploy/docker/docker-compose.yml --env-file .env up -d alertmanager`. В его логе появится `alertmanager config: telegram`
+
+Alertmanager не подставляет переменные окружения в свой конфиг, поэтому при старте контейнера значения из `.env`
+записываются во временные файлы внутри контейнера, а конфиг читает их через `bot_token_file` и `chat_id_file`
 
 Чтобы получить администратора, зарегистрируйте пользователя через `/v1/auth/register` и выдайте ему права:
 
