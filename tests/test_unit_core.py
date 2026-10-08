@@ -52,7 +52,6 @@ class MemoryRedis:
     def __init__(self):
         self.store = {}
         self.deleted = []
-        self.counter = 0
 
     async def get(self, key):
         return self.store.get(key)
@@ -60,10 +59,6 @@ class MemoryRedis:
     async def setex(self, key, ttl, value):
         self.store[key] = value
         self.ttl = ttl
-
-    async def incr(self, key):
-        self.counter += 1
-        return self.counter
 
     async def delete(self, *keys):
         self.deleted.extend(keys)
@@ -95,16 +90,11 @@ async def test_cache_service_roundtrip_and_invalidation_helpers():
     assert await cache.get_or_set_cache("fresh", fetch) == {"fresh": True}
     assert await cache.get_or_set_cache("fresh", fetch) == {"fresh": True}
     assert calls == 1
-    assert await cache.get_count("counter") == 1
 
     redis.store.update({"products:1": b"{}", "users:1": b"{}", "orders:1": b"{}"})
     await cache.delete_products([1, 2])
     await cache.delete_users(3)
     await cache.delete_orders(user_ids=[4], order_ids=5)
-    await cache.create_user_session(9, "token")
-    assert (await cache.get_user_session("token"))["user_id"] == 9
-    await cache.delete_user_session("token")
-    assert await cache.get_user_session("missing") is None
     assert "product:1" in redis.deleted
     assert "user:3" in redis.deleted
     assert "order:5" in redis.deleted

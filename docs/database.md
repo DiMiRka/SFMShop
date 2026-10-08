@@ -13,7 +13,6 @@
 | --- | --- | --- |
 | PostgreSQL | `users`, `products`, `orders`, `order_items`, `reviews` | есть, схема в `src/database/models.py`, миграции Alembic |
 | Redis | кэш каталога, пользователей и заказов | есть |
-| Redis | сессии `session:{token}` | методы в `CacheService` есть, но не используются: авторизация на JWT без серверных сессий |
 | MongoDB | журнал событий `events`: создание, изменение и удаление товаров, пользователей и заказов | есть, пишет консьюмер `event_log_queue`, читает админ через `GET /v1/events/` |
 
 Отзывы: одна запись на пару «товар + пользователь» (`uq_reviews_product_user`), оценка от 1 до 5 (`check_review_rating`)

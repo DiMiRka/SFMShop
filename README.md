@@ -301,7 +301,7 @@ pytest --cov=src --cov-report=term-missing
 Линтер и проверка типов (то же, что в CI):
 
 ```bash
-ruff check src/
+ruff check src/ tests/
 ```
 
 ```bash

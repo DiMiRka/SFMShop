@@ -1,5 +1,4 @@
 from redis.asyncio import Redis
-from datetime import datetime
 import orjson
 from typing import Any
 from loguru import logger
@@ -29,12 +28,6 @@ class CacheService:
         result = await func()
         await self.set(key, result, ttl)
         return result
-
-    async def get_count(self, key: str):
-        data = await self.redis.incr(key)
-        if data:
-            return data
-        return None
 
     async def delete(self, *keys: str):
         if keys:
@@ -98,24 +91,3 @@ class CacheService:
                 order_ids = [order_ids]
 
             await self.delete(*[f"order:{order_id}" for order_id in order_ids])
-
-    async def create_user_session(self, user_id, session_token):
-        session_key = f"session:{session_token}"
-        session_data = {
-            "user_id": user_id,
-            "created_at": datetime.now().isoformat()
-        }
-
-        await self.set(session_key, session_data, 86400)
-        return session_token
-
-    async def get_user_session(self, session_token):
-        session_key = f"session:{session_token}"
-        cached = await self.get(session_key)
-        if cached:
-            return cached
-        return None
-
-    async def delete_user_session(self, session_token):
-        session_key = f"session:{session_token}"
-        await self.delete(session_key)

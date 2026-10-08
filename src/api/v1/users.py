@@ -26,8 +26,6 @@ async def put_user(cu: current_user, service: user_write_service, user_id: int, 
     ensure_can_update_user(cu, user_id, user)
     return await service.update_user(user_id, user)
 
-# Делаем ручку patch
-
 
 @users_router.delete("/{user_id}", summary="Удалить пользователя", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(cu: current_user, service: user_write_service, user_id: int):
