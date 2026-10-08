@@ -12,7 +12,7 @@
 .\.venv\Scripts\python.exe -m pytest --cov=src --cov-report=term-missing
 ```
 
-Результат: 194 теста пройдены, общее покрытие `src` 98%
+Результат: 198 тестов пройдены, общее покрытие `src` 98%
 
 ## Принципы
 

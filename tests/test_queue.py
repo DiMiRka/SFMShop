@@ -279,3 +279,18 @@ async def test_event_is_published_only_after_commit(routing_key, operation):
     await operation(*services_on(log))
 
     assert log.entries == ["begin", "commit", f"publish {routing_key}"]
+
+
+@pytest.mark.parametrize("connection, should_close", [
+    (None, False),
+    (SimpleNamespace(is_closed=True, close=AsyncMock()), False),
+    (SimpleNamespace(is_closed=False, close=AsyncMock()), True),
+])
+async def test_consumer_closes_open_connection_on_shutdown(connection, should_close):
+    consumer, _ = build_consumer()
+    consumer.connection = connection
+
+    await consumer.close()
+
+    if connection is not None:
+        assert connection.close.await_count == (1 if should_close else 0)

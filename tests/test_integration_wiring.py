@@ -258,6 +258,9 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
         async def start(self):
             self.started = True
 
+        async def close(self):
+            self.closed = True
+
     monkeypatch.setattr(main, "setup_logging", lambda: None)
     monkeypatch.setattr(main.redis.asyncio, "Redis", RedisFactory)
     monkeypatch.setattr(main.httpx, "AsyncClient", HttpClient)
@@ -306,6 +309,7 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
 
     assert llm_client.closed
     assert mongo.closed
+    assert app.state.consumer.closed
 
     async def mongo_down(keys, **kwargs):
         raise ConnectionError("mongo is down")

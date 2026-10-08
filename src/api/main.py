@@ -64,6 +64,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    await app.state.consumer.close()
+
     if getattr(app.state.queue, "connection", None):
         await app.state.queue.close()
 

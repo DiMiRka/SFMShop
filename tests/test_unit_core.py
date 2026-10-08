@@ -165,7 +165,7 @@ def test_schemas_validate_and_serialize():
     with pytest.raises(PydanticValidationError):
         ProductCreate(name="", price=Decimal("1.00"), quantity=1)
     with pytest.raises(PydanticValidationError):
-        ProductCreate(name="Desk", price=Decimal("1.00"), quantity=0)
+        ProductCreate(name="Desk", price=Decimal("1.00"), quantity=-1)
 
     user = UserCreate(
         name="Dima",
@@ -331,3 +331,8 @@ async def test_tokens_are_created_without_deprecated_utcnow():
     refresh_exp = (await decode_token(refresh))["exp"]
     assert abs(access_exp - now - app_settings.access_token_expire_minutes * 60) < 5
     assert abs(refresh_exp - now - app_settings.refresh_token_expire_days * 86400) < 5
+
+
+def test_product_can_be_created_out_of_stock_or_with_large_stock():
+    assert ProductCreate(name="Preorder", price=Decimal("1.00"), quantity=0).quantity == 0
+    assert ProductCreate(name="Bulk", price=Decimal("1.00"), quantity=500).quantity == 500

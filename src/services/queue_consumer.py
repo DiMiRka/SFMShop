@@ -220,3 +220,8 @@ class QueueConsumer:
     async def start(self):
         await self._connect()
         logger.info("Consumer started")
+
+    async def close(self):
+        if self.connection is not None and not self.connection.is_closed:
+            await self.connection.close()
+            logger.info("Consumer stopped")
