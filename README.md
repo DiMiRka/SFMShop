@@ -227,7 +227,7 @@ python -m scripts.make_admin admin@example.com
 | Метод | Путь            | Описание                                                                                      |
 |-------|-----------------|-----------------------------------------------------------------------------------------------|
 | GET   | `/health/live`  | Процесс жив, внешние сервисы не проверяются                                                   |
-| GET   | `/health/ready` | PostgreSQL и реплика доступны (иначе 503)<br/>Redis, RabbitMQ или MongoDB недоступны →  статус `degraded` |
+| GET   | `/health/ready` | PostgreSQL и реплика доступны (иначе 503)<br/>Redis, RabbitMQ, MongoDB или консьюмер очереди недоступны →  статус `degraded` |
 
 Метрики Prometheus отдаются не на порту API, а на отдельном порту `METRICS_PORT` (по умолчанию 9100): `GET :9100/metrics`
 

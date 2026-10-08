@@ -25,11 +25,20 @@ ALL_EVENTS = (
 
 
 class QueueConsumer:
-    def __init__(self, cache: CacheService, url: str, events: EventRepository | None = None):
+    def __init__(
+            self,
+            cache: CacheService,
+            url: str,
+            events: EventRepository | None = None,
+            reconnect_base_delay: float = 1.0,
+            reconnect_max_delay: float = 30.0):
         self.url = url
         self.cache = cache
         self.events = events
         self.max_retries = 3
+        self.reconnect_base_delay = reconnect_base_delay
+        self.reconnect_max_delay = reconnect_max_delay
+        self._reconnect_task: asyncio.Task | None = None
 
         self.connection: Any = None
         self.channel: Any = None
@@ -38,7 +47,11 @@ class QueueConsumer:
         self.order_exchange: Any = None
         self.product_exchange: Any = None
 
-    async def _connect(self):
+    @property
+    def is_connected(self) -> bool:
+        return self.connection is not None and not self.connection.is_closed
+
+    async def _connect(self) -> bool:
         try:
             self.connection = await aio_pika.connect_robust(url=self.url)
             self.channel = await self.connection.channel()
@@ -62,6 +75,28 @@ class QueueConsumer:
 
         except Exception as e:
             logger.error(f"Ошибка подключения к RabbitMQ: {e}")
+            await self._drop_connection()
+            return False
+
+        return True
+
+    async def _drop_connection(self):
+        connection, self.connection = self.connection, None
+        if connection is not None and not connection.is_closed:
+            try:
+                await connection.close()
+            except Exception as e:
+                logger.warning(f"consumer_close_error error={e!r}")
+
+    async def _reconnect_forever(self):
+        delay = self.reconnect_base_delay
+        while True:
+            logger.warning(f"consumer_reconnect retry_in={delay}")
+            await asyncio.sleep(delay)
+            if await self._connect():
+                logger.info("Consumer started")
+                return
+            delay = min(delay * 2, self.reconnect_max_delay)
 
     @staticmethod
     def get_retry_count(message: aio_pika.IncomingMessage) -> int:
@@ -218,10 +253,20 @@ class QueueConsumer:
                 await self._retry_or_park(message, "event_log_queue")
 
     async def start(self):
-        await self._connect()
-        logger.info("Consumer started")
+        if await self._connect():
+            logger.info("Consumer started")
+            return
+
+        self._reconnect_task = asyncio.create_task(self._reconnect_forever())
 
     async def close(self):
-        if self.connection is not None and not self.connection.is_closed:
+        if self._reconnect_task is not None and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
+            except asyncio.CancelledError:
+                pass
+
+        if self.is_connected:
             await self.connection.close()
             logger.info("Consumer stopped")

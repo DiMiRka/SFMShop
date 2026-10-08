@@ -55,7 +55,10 @@ POST /v1/orders → OrderService → commit в БД → publish order.created �
 
 ## Consumer
 
-`QueueConsumer` запускается в lifespan внутри процесса API, `prefetch_count=10`
+`QueueConsumer` запускается в lifespan внутри процесса API, `prefetch_count=10`\
+Если RabbitMQ при старте недоступен, консьюмер повторяет подключение в фоне с паузой 1, 2, 4 … 30 секунд, пока не подключится\
+Без этого очереди не объявлялись бы, а события уходили бы в exchange без привязок и терялись без ошибок\
+Состояние консьюмера видно в `/health/ready` (`queue_consumer`), продюсер при проверке готовности переподключается сам
 
 Надёжность обработки:
 

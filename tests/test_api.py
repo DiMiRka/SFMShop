@@ -195,3 +195,24 @@ def test_product_card_is_served_from_database_when_redis_is_down():
 
     assert response.status_code == 200
     assert response.json()["name"] == "Mouse"
+
+
+def test_register_returns_created_user_matching_response_schema():
+    from src.services.user_service import UserService
+    from tests.test_services import FakeCache, FakeQueue, OrderRepoFake, UserRepoFake
+
+    service = UserService(UserRepoFake(), OrderRepoFake(), FakeCache(), FakeQueue())
+
+    async def override_user_service():
+        return service
+
+    app.dependency_overrides[dependencies.get_user_write_service] = override_user_service
+
+    response = TestClient(app, raise_server_exceptions=False).post("/v1/auth/register", json={
+        "name": "Dima", "email": "new@test.com", "age": 31, "password": "abc12345",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == "new@test.com" and body["balance"] == "0"
+    assert "hashed_password" not in body

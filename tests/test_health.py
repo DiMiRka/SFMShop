@@ -45,7 +45,7 @@ class Engine:
 
 def make_service(primary=None, replica=None, redis_ping=None, queue_closed=False, timeout=1.0):
     redis = SimpleNamespace(ping=redis_ping or AsyncMock(return_value=True))
-    queue = SimpleNamespace(connection=SimpleNamespace(is_closed=queue_closed))
+    queue = SimpleNamespace(ensure_connected=AsyncMock(return_value=not queue_closed))
     engines = {"postgres": primary or Engine(), "postgres_replica": replica or Engine()}
     return HealthService(engines, redis, queue, timeout=timeout)
 

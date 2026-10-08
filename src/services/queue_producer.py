@@ -77,6 +77,10 @@ class QueueProducer:
             logger.warning("rabbitmq_reconnecting")
             await self._connect()
 
+    async def ensure_connected(self) -> bool:
+        await self._ensure_connection()
+        return self.connection is not None and not self.connection.is_closed
+
     async def publish_event(self, exchange: str, routing_key: str, message: dict) -> bool:
         if exchange not in EXCHANGES:
             raise ValueError(f"Exchange {exchange} not found")

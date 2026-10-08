@@ -20,11 +20,13 @@ class HealthService:
             redis: Redis,
             queue: QueueProducer,
             mongo: Any = None,
+            consumer: Any = None,
             timeout: float = CHECK_TIMEOUT):
         self.engines = engines
         self.redis = redis
         self.queue = queue
         self.mongo = mongo
+        self.consumer = consumer
         self.timeout = timeout
 
     async def readiness(self) -> dict[str, Any]:
@@ -34,6 +36,8 @@ class HealthService:
         optional: dict[str, Callable[[], Awaitable[Any]]] = {"redis": self._redis, "rabbitmq": self._rabbitmq}
         if self.mongo is not None:
             optional["mongodb"] = self._mongodb
+        if self.consumer is not None:
+            optional["queue_consumer"] = self._queue_consumer
 
         checks = {**critical, **optional}
         results = await asyncio.gather(*(self._run(name, check) for name, check in checks.items()))
@@ -70,7 +74,10 @@ class HealthService:
     async def _mongodb(self) -> None:
         await self.mongo.admin.command("ping")
 
+    async def _queue_consumer(self) -> None:
+        if not self.consumer.is_connected:
+            raise ConnectionError("Queue consumer is not connected")
+
     async def _rabbitmq(self) -> None:
-        connection = getattr(self.queue, "connection", None)
-        if connection is None or connection.is_closed:
+        if not await self.queue.ensure_connected():
             raise ConnectionError("RabbitMQ connection is closed")

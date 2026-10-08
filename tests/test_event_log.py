@@ -264,7 +264,7 @@ async def test_mongo_down_only_degrades_readiness():
     async def ok():
         return True
 
-    service = HealthService({}, SimpleNamespace(ping=ok), SimpleNamespace(connection=SimpleNamespace(is_closed=False)),
+    service = HealthService({}, SimpleNamespace(ping=ok), SimpleNamespace(ensure_connected=AsyncMock(return_value=True)),
                             mongo=SimpleNamespace(admin=SimpleNamespace(
                                 command=AsyncMock(side_effect=ServerSelectionTimeoutError("down")))))
 

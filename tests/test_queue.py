@@ -373,10 +373,30 @@ async def test_disconnected_consumer_degrades_readiness():
     async def ok():
         return True
 
-    queue = SimpleNamespace(connection=SimpleNamespace(is_closed=False))
+    queue = SimpleNamespace(ensure_connected=AsyncMock(return_value=True))
     consumer = QueueConsumer(MagicMock(), "amqp://test")
 
     result = await HealthService({}, SimpleNamespace(ping=ok), queue, consumer=consumer).readiness()
 
     assert result["status"] == "degraded"
     assert result["checks"]["queue_consumer"] == "fail"
+
+
+async def test_producer_reconnects_on_demand_for_readiness(monkeypatch):
+    producer = QueueProducer("amqp://test")
+    producer.connection = None
+
+    async def connect():
+        producer.connection = SimpleNamespace(is_closed=False)
+        return True
+
+    producer._connect = connect
+
+    assert await producer.ensure_connected() is True
+
+    async def still_down():
+        return False
+
+    producer.connection = SimpleNamespace(is_closed=True)
+    producer._connect = still_down
+    assert await producer.ensure_connected() is False

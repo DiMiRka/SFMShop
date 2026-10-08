@@ -42,7 +42,7 @@ services:
       mongo:
         condition: service_started
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ../../src:/app/src
 
@@ -83,6 +83,11 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 5s
+      timeout: 10s
+      retries: 20
 
   prometheus:
     image: prom/prometheus:v3.5.0

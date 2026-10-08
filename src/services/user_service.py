@@ -71,10 +71,7 @@ class UserService:
                 {"user_ids": new_user_db.id}
             )
 
-        return {
-            "message": "Пользователь создан",
-            "user": UserResponse.model_validate(new_user_db).model_dump(mode="json")
-        }
+        return UserResponse.model_validate(new_user_db).model_dump(mode="json")
 
     async def authorized_user(self, form_data: OAuth2PasswordRequestForm):
         user = await self.user_rep.get_by_email(form_data.username)

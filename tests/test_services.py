@@ -232,10 +232,10 @@ async def test_user_service_success_auth_and_not_found():
     registered = await service.register_user(
         UserCreate(name="New", email="new@test.com", age=22, balance=50, password="abc12345")
     )
-    assert registered["user"]["email"] == "new@test.com"
+    assert registered["email"] == "new@test.com"
     assert users.created["balance"] == 0
     assert "is_admin" not in users.created
-    assert registered["user"]["is_admin"] is False
+    assert registered["is_admin"] is False
 
     users.email_user = users.user
     with pytest.raises(ValidationError):
