@@ -97,8 +97,88 @@ jobs:
           docker run --rm --entrypoint pip sfmshop:ci check
           docker run --rm --entrypoint python sfmshop:ci -c "import src.api.main"
 
+  integration:
+    runs-on: ubuntu-latest
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: sfmshop_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_REPLICA_HOST: localhost
+      DB_REPLICA_PORT: 5432
+      DB_REPLICA_NAME: sfmshop_test
+      DB_REPLICA_USER: postgres
+      DB_REPLICA_PASSWORD: postgres
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://guest:guest@localhost:5672/
+      MONGO_URL: mongodb://localhost:27017
+      RUN_INTEGRATION_TESTS: "1"
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sfmshop_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 30
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping: 1})'"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Apply migrations
+        run: alembic upgrade head
+
+      - name: Run integration tests
+        run: pytest tests/integration -v
+
   deploy:
-    needs: [ test, build ]
+    needs: [ test, build, integration ]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     permissions:

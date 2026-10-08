@@ -102,7 +102,7 @@ docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app alem
 - RabbitMQ Management: http://localhost:15672 (guest / guest)
 - Метрики приложения: http://localhost:9100/metrics
 - Prometheus с правилами алертов: http://localhost:9090
-- Grafana с дашбордом «Состояние сервиса»: http://localhost:3001 (просмотр без входа; для правки вход `admin` / `GRAFANA_ADMIN_PASSWORD`, по умолчанию `admin`).\
+- Grafana с дашбордом «Состояние сервиса»: http://localhost:3001 (просмотр без входа; для правки вход `admin` / `GRAFANA_ADMIN_PASSWORD`, по умолчанию `admin`)\
   Дашборд хранится в `deploy/grafana/dashboards/sfmshop-service.json` (после правки файла выполните `docker compose ... restart grafana`)
 
 Чтобы получить администратора, зарегистрируйте пользователя через `/v1/auth/register` и выдайте ему права:
@@ -306,6 +306,11 @@ pytest
 pytest --cov=src --cov-report=term-missing
 ```
 
+Интеграционные тесты (`tests/integration`) запускают приложение целиком с настоящими PostgreSQL, Redis, RabbitMQ и MongoDB \
+Без переменной `RUN_INTEGRATION_TESTS=1` они пропускаются, в CI идут отдельной задачей \
+Для локального запуска задайте `RUN_INTEGRATION_TESTS=1` и переменные подключения (`DB_*`, `DB_REPLICA_*`, `REDIS_*`, `RABBITMQ_URL`, `MONGO_URL`)
+к отдельным сервисам и примените миграции (не запускайте их против рабочей базы, тесты создают пользователей, товары и заказы)
+
 Линтер и проверка типов (то же, что в CI):
 
 ```bash
@@ -322,7 +327,8 @@ mypy src/ --ignore-missing-imports
 
 1. **test**: ruff → mypy → миграции на PostgreSQL (`upgrade head`, `alembic check`, `downgrade base`, снова `upgrade head`) → pytest с покрытием и проверкой схемы после миграций → загрузка отчёта в Codecov
 2. **build** (параллельно с test, на каждый push и pull request): сборка Docker-образа → `pip check` и импорт приложения внутри образа. Слои сохраняются в кэш GitHub Actions
-3. **deploy** (только push в `master`, после успешных test и build): сборка образа из кэша, публикация в GitHub Container Registry, выкладка на сервер по SSH через `docker compose pull && up -d`
+3. **integration** (параллельно): PostgreSQL, Redis, RabbitMQ и MongoDB в сервис-контейнерах → миграции → интеграционные тесты `tests/integration`, приложение стартует целиком через lifespan
+4. **deploy** (только push в `master`, после успешных test, build и integration): сборка образа из кэша, публикация в GitHub Container Registry, выкладка на сервер по SSH через `docker compose pull && up -d`
 
 ## Конфигурация
 
