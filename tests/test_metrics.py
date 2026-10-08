@@ -190,7 +190,11 @@ def test_metrics_are_not_exposed_on_public_app_port():
     assert client.get("/metrics").status_code == 404
 
 
-def test_alert_rules_reference_only_exported_metrics():
+@pytest.mark.parametrize("config", [
+    "deploy/prometheus/alerts.yml",
+    "deploy/grafana/dashboards/sfmshop-service.json",
+])
+def test_alerts_and_dashboard_reference_only_exported_metrics(config):
     import re
     from pathlib import Path
 
@@ -205,8 +209,8 @@ def test_alert_rules_reference_only_exported_metrics():
         elif isinstance(value, Histogram):
             exported |= {f"{value._name}_bucket", f"{value._name}_count", f"{value._name}_sum"}
 
-    rules = (Path(__file__).resolve().parents[1] / "deploy" / "prometheus" / "alerts.yml").read_text(encoding="utf-8")
-    referenced = set(re.findall(r"sfmshop_[a-z_]+", rules))
+    text = (Path(__file__).resolve().parents[1] / config).read_text(encoding="utf-8")
+    referenced = set(re.findall(r"sfmshop_[a-z_]+_(?:total|bucket|count|sum)\b", text))
 
     assert referenced
     assert referenced <= exported, sorted(referenced - exported)

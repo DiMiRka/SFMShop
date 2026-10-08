@@ -37,7 +37,7 @@ REST API интернет-магазина \
 | LLM            | Claude API (официальный SDK `anthropic`, async)        |
 | Инфраструктура | Docker, Docker Compose, Kubernetes, GitHub Actions     |
 | Качество       | pytest, pytest-cov, ruff, mypy, Codecov                |
-| Мониторинг     | Prometheus (prometheus_client), Sentry                 |
+| Мониторинг     | Prometheus (prometheus_client), Grafana, Sentry        |
 
 ## Архитектура
 
@@ -102,6 +102,8 @@ docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app alem
 - RabbitMQ Management: http://localhost:15672 (guest / guest)
 - Метрики приложения: http://localhost:9100/metrics
 - Prometheus с правилами алертов: http://localhost:9090
+- Grafana с дашбордом «Состояние сервиса»: http://localhost:3001 (просмотр без входа; для правки вход `admin` / `GRAFANA_ADMIN_PASSWORD`, по умолчанию `admin`).\
+  Дашборд хранится в `deploy/grafana/dashboards/sfmshop-service.json` (после правки файла выполните `docker compose ... restart grafana`)
 
 Чтобы получить администратора, зарегистрируйте пользователя через `/v1/auth/register` и выдайте ему права:
 
