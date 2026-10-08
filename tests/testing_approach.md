@@ -12,8 +12,8 @@
 .\.venv\Scripts\python.exe -m pytest --cov=src --cov-report=term-missing
 ```
 
-Результат: 221 тест пройден и 2 пропущены, общее покрытие `src` 98%\
-В CI проходят все 223: там поднят PostgreSQL и задан `RUN_MIGRATION_TESTS=1`
+Результат: 222 теста пройдены и 2 пропущены, общее покрытие `src` 98%\
+В CI проходят все 224: там поднят PostgreSQL и задан `RUN_MIGRATION_TESTS=1`
 
 ## Принципы
 

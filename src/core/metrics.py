@@ -1,10 +1,12 @@
 from collections.abc import Mapping
 from typing import Any
 
-from prometheus_client import Counter, Histogram, start_http_server
+from prometheus_client import Counter, Histogram, disable_created_metrics, start_http_server
 
 from src.services.log_service import log_service
 
+
+disable_created_metrics()
 
 HTTP_REQUESTS = Counter(
     "sfmshop_http_requests_total",

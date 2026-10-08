@@ -1,3 +1,4 @@
+import re
 import socket
 import urllib.request
 from unittest.mock import AsyncMock, MagicMock
@@ -214,3 +215,15 @@ def test_alerts_and_dashboard_reference_only_exported_metrics(config):
 
     assert referenced
     assert referenced <= exported, sorted(referenced - exported)
+
+
+def test_exposition_has_no_created_timestamp_series():
+    from prometheus_client import generate_latest
+
+    from src.core.metrics import HTTP_REQUESTS
+
+    HTTP_REQUESTS.labels("GET", "/v1/products/", "200").inc(0)
+    body = generate_latest(REGISTRY).decode()
+
+    assert "sfmshop_http_requests_total" in body
+    assert not re.search(r"^\w+_created[{ ]", body, flags=re.MULTILINE)

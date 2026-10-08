@@ -321,7 +321,8 @@ mypy src/ --ignore-missing-imports
 Пайплайн `.github/workflows/ci-cd.yml` запускается на push и pull request:
 
 1. **test**: ruff → mypy → миграции на PostgreSQL (`upgrade head`, `alembic check`, `downgrade base`, снова `upgrade head`) → pytest с покрытием и проверкой схемы после миграций → загрузка отчёта в Codecov
-2. **deploy** (только push в `master`): сборка образа, публикация в GitHub Container Registry, выкладка на сервер по SSH через `docker compose pull && up -d`
+2. **build** (параллельно с test, на каждый push и pull request): сборка Docker-образа → `pip check` и импорт приложения внутри образа. Слои сохраняются в кэш GitHub Actions
+3. **deploy** (только push в `master`, после успешных test и build): сборка образа из кэша, публикация в GitHub Container Registry, выкладка на сервер по SSH через `docker compose pull && up -d`
 
 ## Конфигурация
 
