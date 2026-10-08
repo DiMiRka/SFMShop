@@ -67,7 +67,6 @@ async def test_ready_when_all_dependencies_respond():
 @pytest.mark.parametrize("kwargs, failed", [
     ({"primary": Engine(ConnectionError("db down"))}, "postgres"),
     ({"replica": Engine(ConnectionError("replica down"))}, "postgres_replica"),
-    ({"redis_ping": AsyncMock(side_effect=ConnectionError("redis down"))}, "redis"),
 ])
 async def test_critical_dependency_failure_makes_app_not_ready(kwargs, failed, log_messages):
     result = await make_service(**kwargs).readiness()
@@ -78,11 +77,15 @@ async def test_critical_dependency_failure_makes_app_not_ready(kwargs, failed, l
 
 
 @pytest.mark.anyio
-async def test_rabbitmq_down_only_degrades_readiness():
-    result = await make_service(queue_closed=True).readiness()
+@pytest.mark.parametrize("kwargs, failed", [
+    ({"queue_closed": True}, "rabbitmq"),
+    ({"redis_ping": AsyncMock(side_effect=ConnectionError("redis down"))}, "redis"),
+])
+async def test_cache_and_queue_failures_only_degrade_readiness(kwargs, failed):
+    result = await make_service(**kwargs).readiness()
 
     assert result["status"] == "degraded"
-    assert result["checks"]["rabbitmq"] == "fail"
+    assert result["checks"][failed] == "fail"
 
 
 @pytest.mark.anyio

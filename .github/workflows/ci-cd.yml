@@ -10,6 +10,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: sfmshop_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+
     services:
       postgres:
         image: postgres:17
@@ -47,9 +54,16 @@ jobs:
           pip install mypy==2.3.0
           mypy src/ --ignore-missing-imports
 
+      - name: Check migrations
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
+
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sfmshop_test
+          RUN_MIGRATION_TESTS: "1"
         run: |
           pytest --cov=src --cov-report=xml
 

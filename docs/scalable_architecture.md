@@ -116,7 +116,7 @@ Kubernetes HPA добавляет и убирает поды по загрузк
 
 | Механизм | Что делает | В проекте |
 | --- | --- | --- |
-| Health checks | `/health/live` и `/health/ready` проверяют PostgreSQL, Redis и очередь, Kubernetes перезапускает под или выводит его из балансировки | есть, пробы в `deploy/k8s/deployment.yaml` |
+| Health checks | `/health/live` и `/health/ready` проверяют PostgreSQL (критично), Redis, очередь и MongoDB (только `degraded`), Kubernetes перезапускает под или выводит его из балансировки | есть, пробы в `deploy/k8s/deployment.yaml` |
 | Автовосстановление | Kubernetes перезапускает контейнеры и пересоздаёт поды | есть через Deployment |
 | Репликация | реплики PostgreSQL и Redis | реплика PostgreSQL поддержана в коде |
 | Резервное копирование | ежедневный backup БД в S3 или object storage | нет |

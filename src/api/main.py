@@ -33,8 +33,13 @@ async def lifespan(app: FastAPI):
     configure_sentry(app_settings.sentry_dsn)
     log_service.info("application_starting")
 
-    app.state.redis = redis.asyncio.Redis.from_url(app_settings.redis_url)
-    await app.state.redis.ping()
+    app.state.redis = redis.asyncio.Redis.from_url(
+        app_settings.redis_url, socket_connect_timeout=0.5, socket_timeout=1.0,
+    )
+    try:
+        await app.state.redis.ping()
+    except redis.exceptions.RedisError as exc:
+        log_service.warning("redis_unavailable_on_startup", error=repr(exc))
 
     app.state.http_client = httpx.AsyncClient(timeout=5)
     app.state.queue = await QueueProducer.get_instance(

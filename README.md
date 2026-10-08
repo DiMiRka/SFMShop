@@ -223,7 +223,7 @@ python -m scripts.make_admin admin@example.com
 | Метод | Путь            | Описание                                                                                      |
 |-------|-----------------|-----------------------------------------------------------------------------------------------|
 | GET   | `/health/live`  | Процесс жив, внешние сервисы не проверяются                                                   |
-| GET   | `/health/ready` | PostgreSQL, реплика и Redis доступны (иначе 503)<br/>RabbitMQ или MongoDB недоступны →  статус `degraded` |
+| GET   | `/health/ready` | PostgreSQL и реплика доступны (иначе 503)<br/>Redis, RabbitMQ или MongoDB недоступны →  статус `degraded` |
 
 ## ИИ-ассистент
 
@@ -312,7 +312,7 @@ mypy src/ --ignore-missing-imports
 
 Пайплайн `.github/workflows/ci-cd.yml` запускается на push и pull request:
 
-1. **test**: ruff → mypy → pytest с покрытием → загрузка отчёта в Codecov
+1. **test**: ruff → mypy → миграции на PostgreSQL (`upgrade head`, `alembic check`, `downgrade base`, снова `upgrade head`) → pytest с покрытием и проверкой схемы после миграций → загрузка отчёта в Codecov
 2. **deploy** (только push в `master`): сборка образа, публикация в GitHub Container Registry, выкладка на сервер по SSH через `docker compose pull && up -d`
 
 ## Конфигурация

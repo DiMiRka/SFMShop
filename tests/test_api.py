@@ -176,3 +176,22 @@ def test_foreign_order_is_not_visible_and_cannot_be_deleted():
     order_rep.delete.assert_not_awaited()
     user_rep.update.assert_not_awaited()
     queue.publish_event.assert_not_awaited()
+
+
+def test_product_card_is_served_from_database_when_redis_is_down():
+    from src.services.cache_service import CacheService
+    from src.services.product_service import ProductService
+    from tests.test_services import FakeQueue, ProductRepoFake
+    from tests.test_unit_core import FlakyRedis
+
+    service = ProductService(ProductRepoFake(), CacheService(FlakyRedis(fail_get=True)), FakeQueue())
+
+    async def override_product_service():
+        return service
+
+    app.dependency_overrides[dependencies.get_product_read_service] = override_product_service
+
+    response = client.get("/v1/products/1")
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Mouse"

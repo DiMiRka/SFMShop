@@ -336,3 +336,70 @@ async def test_tokens_are_created_without_deprecated_utcnow():
 def test_product_can_be_created_out_of_stock_or_with_large_stock():
     assert ProductCreate(name="Preorder", price=Decimal("1.00"), quantity=0).quantity == 0
     assert ProductCreate(name="Bulk", price=Decimal("1.00"), quantity=500).quantity == 500
+
+
+class FlakyRedis(MemoryRedis):
+    def __init__(self, fail_get=False, fail_set=False):
+        super().__init__()
+        self.fail_get = fail_get
+        self.fail_set = fail_set
+        self.get_calls = 0
+
+    async def get(self, key):
+        self.get_calls += 1
+        if self.fail_get:
+            from redis.exceptions import ConnectionError as RedisConnectionError
+            raise RedisConnectionError("redis is down")
+        return await super().get(key)
+
+    async def setex(self, key, ttl, value):
+        if self.fail_set:
+            from redis.exceptions import TimeoutError as RedisTimeoutError
+            raise RedisTimeoutError("redis timeout")
+        await super().setex(key, ttl, value)
+
+    async def delete(self, *keys):
+        from redis.exceptions import ConnectionError as RedisConnectionError
+        raise RedisConnectionError("redis is down")
+
+
+async def test_cache_falls_back_to_database_and_skips_redis_for_a_while(log_messages):
+    redis = FlakyRedis(fail_get=True)
+    cache = CacheService(redis, retry_after=60)
+    loads = []
+
+    async def fetch():
+        loads.append(1)
+        return {"from": "db"}
+
+    assert await cache.get_or_set_cache("product:1", fetch) == {"from": "db"}
+    assert await cache.get_or_set_cache("product:1", fetch) == {"from": "db"}
+
+    assert len(loads) == 2
+    assert redis.get_calls == 1
+    assert any("cache_unavailable" in message for message in log_messages)
+
+
+async def test_cache_retries_redis_after_backoff_and_survives_write_errors():
+    redis = FlakyRedis(fail_get=True)
+    cache = CacheService(redis, retry_after=0)
+
+    async def fetch():
+        return {"from": "db"}
+
+    await cache.get_or_set_cache("key", fetch)
+    redis.fail_get = False
+    redis.fail_set = True
+    assert await cache.get_or_set_cache("key", fetch) == {"from": "db"}
+    assert redis.get_calls == 2
+
+    redis.fail_set = False
+    await cache.get_or_set_cache("key", fetch)
+    assert await cache.get("key") == {"from": "db"}
+
+
+async def test_cache_invalidation_still_fails_loudly_so_event_is_retried():
+    from redis.exceptions import RedisError
+
+    with pytest.raises(RedisError):
+        await CacheService(FlakyRedis()).delete_products(1)

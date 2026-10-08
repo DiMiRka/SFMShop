@@ -228,8 +228,10 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
 
     class RedisFactory:
         @staticmethod
-        def from_url(url):
-            return Redis()
+        def from_url(url, **kwargs):
+            redis_client = Redis()
+            redis_client.options = kwargs
+            return redis_client
 
     class HttpClient:
         def __init__(self, timeout):
@@ -298,6 +300,7 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
     app = SimpleNamespace(state=SimpleNamespace())
     async with main.lifespan(app):
         assert app.state.redis.pinged
+        assert app.state.redis.options["socket_connect_timeout"] <= 1
         assert app.state.http_client.timeout == 5
         assert isinstance(app.state.cache, main.CacheService)
         assert isinstance(app.state.consumer, Consumer)
@@ -315,6 +318,11 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
         raise ConnectionError("mongo is down")
 
     mongo.collection.create_index = mongo_down
+
+    async def redis_down(self):
+        raise main.redis.exceptions.ConnectionError("redis is down")
+
+    monkeypatch.setattr(Redis, "ping", redis_down)
     async with main.lifespan(SimpleNamespace(state=SimpleNamespace())):
         pass
 

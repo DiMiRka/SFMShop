@@ -1,12 +1,23 @@
+import time
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 import orjson
 from typing import Any
 from loguru import logger
 
 
 class CacheService:
-    def __init__(self, client: Redis):
+    def __init__(self, client: Redis, retry_after: float = 5.0):
         self.redis = client
+        self.retry_after = retry_after
+        self._unavailable_until = 0.0
+
+    def _available(self) -> bool:
+        return time.monotonic() >= self._unavailable_until
+
+    def _mark_unavailable(self, exc: RedisError) -> None:
+        self._unavailable_until = time.monotonic() + self.retry_after
+        logger.warning(f"cache_unavailable retry_in={self.retry_after} error={exc!r}")
 
     async def get(self, key: str):
         data = await self.redis.get(key)
@@ -20,13 +31,25 @@ class CacheService:
         await self.redis.setex(key, ttl, data_bytes)
 
     async def get_or_set_cache(self, key: str, func, ttl: int = 900):
-        if (cached := await self.get(key)) is not None:
-            logger.debug("Данные получены из кэша")
-            return cached
+        if self._available():
+            try:
+                cached = await self.get(key)
+            except RedisError as exc:
+                self._mark_unavailable(exc)
+            else:
+                if cached is not None:
+                    logger.debug("Данные получены из кэша")
+                    return cached
 
         logger.debug("Запрос данных к БД")
         result = await func()
-        await self.set(key, result, ttl)
+
+        if self._available():
+            try:
+                await self.set(key, result, ttl)
+            except RedisError as exc:
+                self._mark_unavailable(exc)
+
         return result
 
     async def delete(self, *keys: str):

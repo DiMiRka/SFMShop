@@ -31,8 +31,7 @@ class HealthService:
         critical: dict[str, Callable[[], Awaitable[Any]]] = {
             name: self._postgres_check(engine) for name, engine in self.engines.items()
         }
-        critical["redis"] = self._redis
-        optional: dict[str, Callable[[], Awaitable[Any]]] = {"rabbitmq": self._rabbitmq}
+        optional: dict[str, Callable[[], Awaitable[Any]]] = {"redis": self._redis, "rabbitmq": self._rabbitmq}
         if self.mongo is not None:
             optional["mongodb"] = self._mongodb
 

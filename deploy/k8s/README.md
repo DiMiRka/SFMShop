@@ -64,10 +64,10 @@ kubectl get nodes
 | --- | --- | --- |
 | `startupProbe` | `/health/live` | приложение запустилось: до 60 секунд на старт, пока остальные пробы не работают |
 | `livenessProbe` | `/health/live` | процесс отвечает; иначе Kubernetes перезапускает контейнер |
-| `readinessProbe` | `/health/ready` | PostgreSQL (primary и реплика) и Redis доступны; иначе под выводится из балансировки |
+| `readinessProbe` | `/health/ready` | PostgreSQL (primary и реплика) доступны; иначе под выводится из балансировки |
 
-RabbitMQ и MongoDB в readiness не критичны: при их недоступности `/health/ready` отвечает 200 со статусом `degraded`\
-Публикация событий best-effort, и падение брокера не должно выводить из балансировки все поды сразу
+Redis, RabbitMQ и MongoDB в readiness не критичны: при их недоступности `/health/ready` отвечает 200 со статусом `degraded`\
+Без Redis данные читаются прямо из БД, публикация событий best-effort, и падение любого из них не должно выводить из балансировки все поды сразу
 
 ```powershell
 kubectl port-forward deployment/sfmshop-deployment 8000:8000
