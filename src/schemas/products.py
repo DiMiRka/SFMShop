@@ -29,3 +29,8 @@ class ProductResponse(ProductBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProductDetailResponse(ProductResponse):
+    average_rating: float | None = None
+    reviews_count: int = 0

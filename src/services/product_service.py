@@ -4,7 +4,7 @@ from loguru import logger
 from src.repositories.product_repository import ProductRepository
 from src.services.cache_service import CacheService
 from src.services.queue_producer import QueueProducer
-from src.schemas import ProductResponse, ProductCreate, ProductUpdate
+from src.schemas import ProductResponse, ProductCreate, ProductUpdate, ProductDetailResponse
 from src.models.exceptions import NotFoundError
 
 
@@ -47,7 +47,10 @@ class ProductService:
                 logger.warning(f"Product id={product_id} not found")
                 raise NotFoundError("Товар не найден")
 
-            return ProductResponse.model_validate(product).model_dump(mode="json")
+            average_rating, reviews_count = await self.product_rep.get_rating(product_id)
+            card = ProductDetailResponse.model_validate(product)
+            card.average_rating, card.reviews_count = average_rating, reviews_count
+            return card.model_dump(mode="json")
 
         return await self.cache.get_or_set_cache(f"product:{product_id}", fetch)
 

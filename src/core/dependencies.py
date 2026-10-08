@@ -13,7 +13,7 @@ from src.services.queue_producer import QueueProducer
 from src.core.security import decode_token
 from src.core.permissions import ensure_active, ensure_admin
 from src.schemas import TokenData
-from src.repositories import ProductRepository, OrderRepository, UserRepository
+from src.repositories import ProductRepository, OrderRepository, UserRepository, ReviewRepository
 from src.services import (ProductService, UserService, OrderService, ExchangeRateClient)
 from src.core.config import app_settings
 from src.clients.llm import LLMClient
@@ -21,6 +21,7 @@ from src.models.exceptions import LLMUnavailableError
 from src.services.assistant import AssistantService
 from src.services.health_service import HealthService
 from src.services.event_log_service import EventLogService
+from src.services.review_service import ReviewService
 from src.database.connection import engine, engine_replica
 
 
@@ -169,6 +170,18 @@ u_rep_write_dependency = Annotated[UserRepository, Depends(get_user_write_reposi
 u_rep_read_dependency = Annotated[UserRepository, Depends(get_user_read_repository)]
 
 
+async def get_review_write_repository(db: write_db_dependency) -> ReviewRepository:
+    return ReviewRepository(db)
+
+
+async def get_review_read_repository(db: read_db_dependency) -> ReviewRepository:
+    return ReviewRepository(db)
+
+
+r_rep_write_dependency = Annotated[ReviewRepository, Depends(get_review_write_repository)]
+r_rep_read_dependency = Annotated[ReviewRepository, Depends(get_review_read_repository)]
+
+
 # Services
 # ----------------------------------------------------------------------------------------------------------------------
 async def get_product_write_service(rep: p_rep_write_dependency, cache: cache_dependency, queue: queue_dependency) -> ProductService:
@@ -224,6 +237,28 @@ async def get_order_read_service(
 
 order_write_service = Annotated[OrderService, Depends(get_order_write_service)]
 order_read_service = Annotated[OrderService, Depends(get_order_read_service)]
+
+
+async def get_review_write_service(
+        r_rep: r_rep_write_dependency,
+        p_rep: p_rep_write_dependency,
+        o_rep: o_rep_write_dependency,
+        queue: queue_dependency
+) -> ReviewService:
+    return ReviewService(review_rep=r_rep, product_rep=p_rep, order_rep=o_rep, queue=queue)
+
+
+async def get_review_read_service(
+        r_rep: r_rep_read_dependency,
+        p_rep: p_rep_read_dependency,
+        o_rep: o_rep_read_dependency,
+        queue: queue_dependency
+) -> ReviewService:
+    return ReviewService(review_rep=r_rep, product_rep=p_rep, order_rep=o_rep, queue=queue)
+
+
+review_write_service = Annotated[ReviewService, Depends(get_review_write_service)]
+review_read_service = Annotated[ReviewService, Depends(get_review_read_service)]
 
 
 async def get_assistant_service(

@@ -2,7 +2,7 @@ from decimal import Decimal
 from datetime import datetime
 from typing import List
 
-from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Text, false, func
+from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Text, UniqueConstraint, false, func
 from sqlalchemy.orm import DeclarativeBase, relationship, mapped_column, Mapped
 
 
@@ -67,12 +67,14 @@ class OrderItem(Base):
 
 class Review(Base):
     __tablename__ = 'reviews'
+    __table_args__ = (UniqueConstraint('product_id', 'user_id', name='uq_reviews_product_user'),)
 
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True, index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey('products.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    rating: Mapped[int] = mapped_column(CheckConstraint("rating >= 1 AND rating <= 5"))
+    rating: Mapped[int] = mapped_column(CheckConstraint("rating >= 1 AND rating <= 5", name="check_review_rating"),
+                                        nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="reviews")

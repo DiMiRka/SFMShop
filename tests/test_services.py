@@ -67,6 +67,7 @@ class ProductRepoFake:
         self.db = FakeDb()
         self.product = db_product()
         self.products = [self.product]
+        self.rating = (None, 0)
         self.updated = None
         self.deleted = None
 
@@ -76,6 +77,9 @@ class ProductRepoFake:
 
     async def get_count_all(self):
         return len(self.products)
+
+    async def get_rating(self, product_id):
+        return self.rating
 
     async def get_by_id(self, product_id):
         return self.product if product_id == self.product.id else None
@@ -169,6 +173,9 @@ class OrderRepoFake:
 
     async def get_product_ids_by_user(self, user_id):
         return [1] if user_id == self.order.user_id else None
+
+    async def has_purchased(self, user_id, product_id):
+        return user_id == self.order.user_id and any(item.product_id == product_id for item in self.order.items)
 
     async def get_order_products(self, order_id):
         return self.order.items if order_id == self.order.id else []

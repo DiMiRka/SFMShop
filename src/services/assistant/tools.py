@@ -105,7 +105,7 @@ TOOLS: dict[str, Tool] = {
         ),
         Tool(
             name="get_product",
-            description="Товар каталога по id: название, цена, остаток на складе",
+            description="Товар каталога по id: название, цена, остаток на складе, средний рейтинг и число отзывов",
             args_model=GetProductArgs,
             handler=get_product,
         ),

@@ -67,6 +67,15 @@ class OrderRepository(BaseRepository):
 
         return products if products else None
 
+    async def has_purchased(self, user_id: int, product_id: int) -> bool:
+        result = await self.db.execute(
+            select(OrderItem.id)
+            .join(Order, OrderItem.order_id == Order.id)
+            .where(Order.user_id == user_id, OrderItem.product_id == product_id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def create(self, data: dict) -> int:
         order_db = Order(**data)
         self.db.add(order_db)

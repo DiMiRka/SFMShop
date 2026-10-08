@@ -19,6 +19,11 @@ def ensure_self_or_admin(user: User, target_user_id: int) -> None:
         raise ForbiddenError("Недостаточно прав")
 
 
+def ensure_owner(user: User, owner_id: int) -> None:
+    if user.id != owner_id:
+        raise ForbiddenError("Недостаточно прав")
+
+
 def ensure_can_update_user(user: User, target_user_id: int, update: UserUpdatePatch) -> None:
     ensure_self_or_admin(user, target_user_id)
 

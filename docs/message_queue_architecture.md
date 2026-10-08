@@ -24,6 +24,7 @@ POST /v1/orders → OrderService → commit в БД → publish order.created �
 | Exchange | Routing key | Кто публикует | Тело |
 | --- | --- | --- | --- |
 | `product_exchange` | `product.created`, `product.updated`, `product.deleted` | `ProductService` | `product_ids` |
+| `product_exchange` | `review.created`, `review.updated`, `review.deleted` | `ReviewService` | `review_ids`, `product_ids`, `user_ids` |
 | `user_exchange` | `user.created`, `user.updated`, `user.deleted` | `UserService` | `user_ids`; при удалении ещё `order_ids` и `product_ids` |
 | `order_exchange` | `order.created`, `order.deleted` | `OrderService` | `order_ids`, `user_ids`, `product_ids` |
 
@@ -38,7 +39,8 @@ POST /v1/orders → OrderService → commit в БД → publish order.created �
 | `event_log_queue` | все события выше | пишет событие в журнал в MongoDB, см. [database.md](database.md) |
 | `notification_queue` | `order.created` | уведомление о заказе (сейчас запись в лог вместо email) |
 
-Изменение заказа сбрасывает кэш заказов, товаров (изменились остатки) и пользователей (изменился баланс)
+Изменение заказа сбрасывает кэш заказов, товаров (изменились остатки) и пользователей (изменился баланс)\
+Изменение отзыва сбрасывает кэш карточки товара: в ней средний рейтинг и число отзывов
 
 ## Producer
 

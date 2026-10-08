@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from src.repositories.base_repository import BaseRepository
-from src.database.models import Product
+from src.database.models import Product, Review
 
 SEARCH_LIMIT_MAX = 20
 
@@ -71,6 +71,13 @@ class ProductRepository(BaseRepository):
 
     async def delete(self, product: Product) -> None:
         await self.db.delete(product)
+
+    async def get_rating(self, product_id: int) -> tuple[float | None, int]:
+        result = await self.db.execute(
+            select(func.avg(Review.rating), func.count(Review.id)).where(Review.product_id == product_id)
+        )
+        average, count = result.one()
+        return (round(float(average), 2) if average is not None else None), count
 
     async def get_count_all(self) -> int:
         result = await self.db.execute(select(func.count()).select_from(Product))

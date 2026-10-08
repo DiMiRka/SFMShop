@@ -16,6 +16,9 @@ ALL_EVENTS = (
     ("product_exchange", "product.created"),
     ("product_exchange", "product.updated"),
     ("product_exchange", "product.deleted"),
+    ("product_exchange", "review.created"),
+    ("product_exchange", "review.updated"),
+    ("product_exchange", "review.deleted"),
     ("order_exchange", "order.created"),
     ("order_exchange", "order.deleted"),
 )
@@ -154,7 +157,7 @@ class QueueConsumer:
                 elif routing_key.startswith("user."):
                     await self.invalidate_user_cache(data)
 
-                elif routing_key.startswith("product."):
+                elif routing_key.startswith(("product.", "review.")):
                     await self.invalidate_product_cache(data)
             except Exception:
                 await self._retry_or_park(message, "cache_queue")
