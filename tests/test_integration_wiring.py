@@ -264,6 +264,8 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
             self.closed = True
 
     monkeypatch.setattr(main, "setup_logging", lambda: None)
+    metrics_ports = []
+    monkeypatch.setattr(main, "start_metrics_server", metrics_ports.append)
     monkeypatch.setattr(main.redis.asyncio, "Redis", RedisFactory)
     monkeypatch.setattr(main.httpx, "AsyncClient", HttpClient)
     monkeypatch.setattr(main, "QueueProducer", QueueProducer)
@@ -326,7 +328,9 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
     async with main.lifespan(SimpleNamespace(state=SimpleNamespace())):
         pass
 
-    request = SimpleNamespace(method="GET", url=SimpleNamespace(path="/v1/products"))
+    assert metrics_ports == [main.app_settings.metrics_port, main.app_settings.metrics_port]
+
+    request = SimpleNamespace(method="GET", url=SimpleNamespace(path="/v1/products"), scope={})
     response = SimpleNamespace(status_code=200, headers={})
 
     async def call_next(req):

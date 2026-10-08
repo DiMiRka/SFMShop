@@ -294,3 +294,89 @@ async def test_consumer_closes_open_connection_on_shutdown(connection, should_cl
 
     if connection is not None:
         assert connection.close.await_count == (1 if should_close else 0)
+
+
+def scripted_connect(consumer, results):
+    attempts = []
+
+    async def connect():
+        ok = results[min(len(attempts), len(results) - 1)]
+        attempts.append(ok)
+        consumer.connection = SimpleNamespace(is_closed=False, close=AsyncMock()) if ok else None
+        return ok
+
+    consumer._connect = connect
+    return attempts
+
+
+async def test_consumer_keeps_reconnecting_with_backoff_until_rabbitmq_is_up(monkeypatch, log_messages):
+    delays = []
+
+    async def fake_sleep(delay):
+        delays.append(delay)
+
+    monkeypatch.setattr("src.services.queue_consumer.asyncio.sleep", fake_sleep)
+    consumer = QueueConsumer(MagicMock(), "amqp://test", reconnect_base_delay=1, reconnect_max_delay=3)
+    attempts = scripted_connect(consumer, [False, False, False, False, True])
+
+    await consumer.start()
+    assert not consumer.is_connected
+    assert "Consumer started" not in log_messages
+
+    await consumer._reconnect_task
+
+    assert attempts == [False, False, False, False, True]
+    assert delays == [1, 2, 3, 3]
+    assert consumer.is_connected
+    assert "Consumer started" in log_messages
+
+
+async def test_consumer_connected_at_start_needs_no_background_task():
+    consumer = QueueConsumer(MagicMock(), "amqp://test")
+    scripted_connect(consumer, [True])
+
+    await consumer.start()
+
+    assert consumer.is_connected and consumer._reconnect_task is None
+
+
+async def test_close_stops_pending_reconnect_loop():
+    consumer = QueueConsumer(MagicMock(), "amqp://test", reconnect_base_delay=60)
+    scripted_connect(consumer, [False])
+
+    await consumer.start()
+    task = consumer._reconnect_task
+    await consumer.close()
+
+    assert task.cancelled()
+
+
+async def test_failed_setup_closes_half_open_connection(monkeypatch):
+    connection = SimpleNamespace(is_closed=False, close=AsyncMock(),
+                                 channel=AsyncMock(side_effect=ConnectionError("channel failed")))
+
+    async def connect_robust(url):
+        return connection
+
+    monkeypatch.setattr("src.services.queue_consumer.aio_pika.connect_robust", connect_robust)
+    consumer = QueueConsumer(MagicMock(), "amqp://test")
+
+    assert await consumer._connect() is False
+
+    connection.close.assert_awaited_once()
+    assert consumer.connection is None and not consumer.is_connected
+
+
+async def test_disconnected_consumer_degrades_readiness():
+    from src.services.health_service import HealthService
+
+    async def ok():
+        return True
+
+    queue = SimpleNamespace(connection=SimpleNamespace(is_closed=False))
+    consumer = QueueConsumer(MagicMock(), "amqp://test")
+
+    result = await HealthService({}, SimpleNamespace(ping=ok), queue, consumer=consumer).readiness()
+
+    assert result["status"] == "degraded"
+    assert result["checks"]["queue_consumer"] == "fail"

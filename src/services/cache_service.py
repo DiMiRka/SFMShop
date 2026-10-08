@@ -5,6 +5,8 @@ import orjson
 from typing import Any
 from loguru import logger
 
+from src.core.metrics import CACHE_REQUESTS
+
 
 class CacheService:
     def __init__(self, client: Redis, retry_after: float = 5.0):
@@ -31,15 +33,20 @@ class CacheService:
         await self.redis.setex(key, ttl, data_bytes)
 
     async def get_or_set_cache(self, key: str, func, ttl: int = 900):
-        if self._available():
+        if not self._available():
+            CACHE_REQUESTS.labels("skipped").inc()
+        else:
             try:
                 cached = await self.get(key)
             except RedisError as exc:
+                CACHE_REQUESTS.labels("error").inc()
                 self._mark_unavailable(exc)
             else:
                 if cached is not None:
+                    CACHE_REQUESTS.labels("hit").inc()
                     logger.debug("Данные получены из кэша")
                     return cached
+                CACHE_REQUESTS.labels("miss").inc()
 
         logger.debug("Запрос данных к БД")
         result = await func()

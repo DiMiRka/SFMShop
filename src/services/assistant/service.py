@@ -7,7 +7,8 @@ from pydantic import ValidationError as PydanticValidationError
 from src.clients.llm import (AssistantMessage, LLMClient, LLMMessage, LLMResult, ToolCall, ToolResult,
                              ToolResultsMessage, UserMessage)
 from src.database.models import User
-from src.models.exceptions import NotFoundError
+from src.core.metrics import ASSISTANT_REQUESTS, ASSISTANT_TOOL_CALLS
+from src.models.exceptions import LLMUnavailableError, NotFoundError
 from src.schemas.assistant import AssistantResponse
 from src.services.assistant.tools import TOOLS, Tool, ToolContext, ToolOutput
 from src.services.log_service import log_service
@@ -47,6 +48,13 @@ class AssistantService:
         self.tools = TOOLS if tools is None else tools
 
     async def ask(self, message: str) -> AssistantResponse:
+        try:
+            return await self._ask(message)
+        except LLMUnavailableError:
+            ASSISTANT_REQUESTS.labels("unavailable").inc()
+            raise
+
+    async def _ask(self, message: str) -> AssistantResponse:
         specs = [tool.spec for tool in self.tools.values()]
         messages: list[LLMMessage] = [UserMessage(message)]
         seen_products: set[int] = set()
@@ -57,6 +65,7 @@ class AssistantService:
 
             if result.stop_reason == "refusal":
                 log_service.warning("assistant_refusal", user_id=self.user.id, step=step)
+                ASSISTANT_REQUESTS.labels("refusal").inc()
                 return AssistantResponse(answer=REFUSAL_ANSWER, product_ids=[], order_ids=[])
 
             if not result.tool_calls:
@@ -75,6 +84,7 @@ class AssistantService:
             messages.append(ToolResultsMessage(tool_results))
 
         log_service.warning("assistant_steps_exceeded", user_id=self.user.id, max_steps=self.max_steps)
+        ASSISTANT_REQUESTS.labels("steps_exceeded").inc()
         return AssistantResponse(answer=STEPS_EXCEEDED_ANSWER, product_ids=[], order_ids=[])
 
     async def _run_tool(self, call: ToolCall) -> tuple[ToolResult, ToolOutput | None]:
@@ -84,18 +94,24 @@ class AssistantService:
         tool = self.tools.get(call.name)
 
         if tool is None:
+            result = "unknown_tool"
             content = {"error": f"Неизвестный инструмент: {call.name}"}
         else:
+            result = "ok"
             try:
                 args = tool.args_model.model_validate(call.arguments)
                 output = await tool.handler(self.context, args)
             except PydanticValidationError as exc:
+                result = "invalid_arguments"
                 content = {
                     "error": "Некорректные аргументы",
                     "details": exc.errors(include_url=False, include_context=False, include_input=False),
                 }
             except NotFoundError as exc:
+                result = "not_found"
                 content = {"error": str(exc)}
+
+        ASSISTANT_TOOL_CALLS.labels(call.name if tool is not None else "unknown", result).inc()
 
         log_service.info(
             "assistant_tool_call",
@@ -121,6 +137,7 @@ class AssistantService:
             response = AssistantResponse.model_validate_json(result.text)
         except PydanticValidationError:
             log_service.warning("assistant_invalid_response", user_id=self.user.id, stop_reason=result.stop_reason)
+            ASSISTANT_REQUESTS.labels("invalid_response").inc()
             return AssistantResponse(answer=INVALID_RESPONSE_ANSWER, product_ids=[], order_ids=[])
 
         product_ids = known_ids(response.product_ids, seen_products)
@@ -135,6 +152,7 @@ class AssistantService:
             )
 
         log_service.info("assistant_completed", user_id=self.user.id, steps=step)
+        ASSISTANT_REQUESTS.labels("answered").inc()
         return AssistantResponse(answer=response.answer, product_ids=product_ids, order_ids=order_ids)
 
 

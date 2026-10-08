@@ -4,6 +4,7 @@ from loguru import logger
 from src.repositories import OrderRepository, UserRepository, ProductRepository
 from src.services.cache_service import CacheService
 from src.services.queue_producer import QueueProducer
+from src.core.metrics import ORDERS_CREATED
 from src.schemas import (OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate,
                          OrderInDB, OrderItemsInDB)
 from src.models.exceptions import InsufficientStockError, BusinessLogicError, NotFoundError, ValidationError
@@ -144,6 +145,8 @@ class OrderService:
                     total=product_total,
                 ).model_dump(exclude_unset=True)
                 await self.order_rep.create_order_item(data)
+
+        ORDERS_CREATED.inc()
 
         await self.queue.publish_event(
                 "order_exchange",

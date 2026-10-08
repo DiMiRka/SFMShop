@@ -6,6 +6,7 @@ from uuid import uuid4
 from loguru import logger
 
 from src.core.config import app_settings
+from src.core.metrics import EVENTS_PUBLISHED
 
 
 EXCHANGES = ("user_exchange", "order_exchange", "product_exchange")
@@ -103,12 +104,14 @@ class QueueProducer:
                     routing_key=routing_key
                 )
                 logger.info(f"event_published exchange={exchange} routing_key={routing_key} message={message}")
+                EVENTS_PUBLISHED.labels(routing_key, "ok").inc()
                 return True
 
             except Exception as e:
                 logger.warning(f"event_publish_error attempt={attempt + 1}/{self.max_retries} error={e!r}")
 
         logger.error(f"event_publish_failed exchange={exchange} routing_key={routing_key} message={message}")
+        EVENTS_PUBLISHED.labels(routing_key, "failed").inc()
         return False
 
     async def close(self):

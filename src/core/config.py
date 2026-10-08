@@ -47,6 +47,8 @@ class AppSettings(BaseSettings):
     rate_limit_login: str = "5/minute"
     rate_limit_storage_uri: str = "memory://"
 
+    metrics_port: int | None = 9100
+
     sentry_dsn: str | None = None
     debug: bool = False
 

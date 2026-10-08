@@ -14,13 +14,14 @@ REST API интернет-магазина \
 
 **Возможности**
 
-- регистрация, вход и обновление токена (JWT access + refresh, OAuth2 password flow);
-- CRUD товаров, пользователей и заказов, пагинация через `limit` / `offset`;
-- разделение чтения и записи: отдельные сессии для primary и реплики PostgreSQL;
-- кэш в Redis с инвалидацией по событиям из RabbitMQ;
-- rate limiting на вход и на ИИ-ассистента (slowapi, счётчики в Redis), структурированные логи, Sentry подключается при наличии `sentry-sdk` и `SENTRY_DSN`;
-- проверки здоровья `/health/live` и `/health/ready` для проб Kubernetes;
-- единый формат ошибок через доменные исключения и exception handlers;
+- регистрация, вход и обновление токена (JWT access + refresh, OAuth2 password flow)
+- CRUD товаров, пользователей и заказов, пагинация через `limit` / `offset`
+- разделение чтения и записи: отдельные сессии для primary и реплики PostgreSQL
+- кэш в Redis с инвалидацией по событиям из RabbitMQ
+- rate limiting на вход и на ИИ-ассистента (slowapi, счётчики в Redis), структурированные логи, Sentry подключается при наличии `sentry-sdk` и `SENTRY_DSN`
+- проверки здоровья `/health/live` и `/health/ready` для проб Kubernetes
+- метрики Prometheus на отдельном порту 9100 и правила алертов
+- единый формат ошибок через доменные исключения и exception handlers
 - ИИ-ассистент магазина на Claude API: tool calling, structured output, права проверяет сервер, а не модель
 
 ## Стек
@@ -36,6 +37,7 @@ REST API интернет-магазина \
 | LLM            | Claude API (официальный SDK `anthropic`, async)        |
 | Инфраструктура | Docker, Docker Compose, Kubernetes, GitHub Actions     |
 | Качество       | pytest, pytest-cov, ruff, mypy, Codecov                |
+| Мониторинг     | Prometheus (prometheus_client), Sentry                 |
 
 ## Архитектура
 
@@ -98,6 +100,8 @@ docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app alem
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 - RabbitMQ Management: http://localhost:15672 (guest / guest)
+- Метрики приложения: http://localhost:9100/metrics
+- Prometheus с правилами алертов: http://localhost:9090
 
 Чтобы получить администратора, зарегистрируйте пользователя через `/v1/auth/register` и выдайте ему права:
 
@@ -224,6 +228,8 @@ python -m scripts.make_admin admin@example.com
 |-------|-----------------|-----------------------------------------------------------------------------------------------|
 | GET   | `/health/live`  | Процесс жив, внешние сервисы не проверяются                                                   |
 | GET   | `/health/ready` | PostgreSQL и реплика доступны (иначе 503)<br/>Redis, RabbitMQ или MongoDB недоступны →  статус `degraded` |
+
+Метрики Prometheus отдаются не на порту API, а на отдельном порту `METRICS_PORT` (по умолчанию 9100): `GET :9100/metrics`
 
 ## ИИ-ассистент
 

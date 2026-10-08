@@ -15,6 +15,7 @@ from src.clients.llm import create_llm_client
 from src.database.connection import create_mongo_client
 from src.repositories.event_repository import EventRepository
 from src.core.config import app_settings, uvicorn_options
+from src.core.metrics import HTTP_DURATION, HTTP_REQUESTS, route_label, start_metrics_server
 from src.core.limiter import limiter
 from src.services.cache_service import CacheService
 from src.services.log_service import configure_sentry, log_service, setup_logging
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     configure_sentry(app_settings.sentry_dsn)
     log_service.info("application_starting")
+    start_metrics_server(app_settings.metrics_port)
 
     app.state.redis = redis.asyncio.Redis.from_url(
         app_settings.redis_url, socket_connect_timeout=0.5, socket_timeout=1.0,
@@ -121,6 +123,10 @@ async def log_requests(request: Request, call_next):
         response = await call_next(request)
     except Exception as exc:
         process_time = time.time() - start_time
+        if not is_probe:
+            route = route_label(request.scope)
+            HTTP_REQUESTS.labels(method, route, "500").inc()
+            HTTP_DURATION.labels(method, route).observe(process_time)
         log_service.error(
             "http_request_failed",
             exception=exc,
@@ -132,6 +138,11 @@ async def log_requests(request: Request, call_next):
         raise
 
     process_time = time.time() - start_time
+    if not is_probe:
+        route = route_label(request.scope)
+        HTTP_REQUESTS.labels(method, route, str(response.status_code)).inc()
+        HTTP_DURATION.labels(method, route).observe(process_time)
+
     log_fields = {
         "method": method,
         "path": path,

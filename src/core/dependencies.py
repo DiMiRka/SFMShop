@@ -69,6 +69,7 @@ def get_health_service(request: Request) -> HealthService:
         redis=request.app.state.redis,
         queue=request.app.state.queue,
         mongo=request.app.state.mongo,
+        consumer=getattr(request.app.state, "consumer", None),
     )
 
 

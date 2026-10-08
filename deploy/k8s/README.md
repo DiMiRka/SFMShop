@@ -74,6 +74,22 @@ kubectl port-forward deployment/sfmshop-deployment 8000:8000
 curl http://localhost:8000/health/ready
 ```
 
+## Метрики
+
+Приложение отдаёт метрики Prometheus на порту `9100` (`/metrics`), отдельно от API\
+Порт объявлен в контейнере, но не входит в `Service`: через `LoadBalancer` метрики наружу не видны\
+Prometheus в кластере находит поды по аннотациям `prometheus.io/scrape`, `prometheus.io/port` и `prometheus.io/path`
+
+Правила алертов лежат в `deploy/prometheus/alerts.yml`, их можно подключить к Prometheus в кластере как есть
+
+```powershell
+kubectl port-forward deployment/sfmshop-deployment 9100:9100
+curl http://localhost:9100/metrics
+```
+
+Контейнер запускает один процесс uvicorn, поэтому метрики пода собираются в одном месте\
+При нескольких воркерах в одном контейнере понадобился бы мультипроцессный режим `prometheus_client`
+
 ## Деплой
 
 Образ собирает CI при каждом push в `master` и публикует в GitHub Container Registry

@@ -1,0 +1,43 @@
+groups:
+  - name: sfmshop
+    rules:
+      - alert: SFMShopHighErrorRate
+        expr: |
+          sum(rate(sfmshop_http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(sfmshop_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Больше 5% ответов с ошибкой 5xx"
+
+      - alert: SFMShopSlowResponses
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(sfmshop_http_request_duration_seconds_bucket[5m]))) > 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 времени ответа выше целевых 150 мс"
+
+      - alert: SFMShopEventsNotPublished
+        expr: sum(increase(sfmshop_events_published_total{result="failed"}[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "События не доходят до RabbitMQ: кэш и журнал событий отстают"
+
+      - alert: SFMShopCacheUnavailable
+        expr: sum(increase(sfmshop_cache_requests_total{result=~"error|skipped"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis недоступен, запросы идут напрямую в PostgreSQL"
+
+      - alert: SFMShopAssistantUnavailable
+        expr: sum(increase(sfmshop_assistant_requests_total{outcome="unavailable"}[10m])) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "ИИ-ассистент отвечает 503: провайдер LLM недоступен"
