@@ -11,7 +11,7 @@ from src.clients.llm import LLMResult
 from src.core import dependencies
 from src.core.config import app_settings
 from src.core.limiter import limiter
-from src.models.exceptions import LLMUnavailableError
+from src.core.exceptions import LLMUnavailableError
 
 
 client = TestClient(app)

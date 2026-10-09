@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 from typing import Any, cast
 from fastapi import FastAPI, Request
 import redis
-import httpx
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -24,7 +23,7 @@ from src.services.queue_consumer import QueueConsumer
 from src.api.exceptions import (validation_notfound_handler, validation_exception_handler,
                                 business_exception_handler, unauthorized_handler, forbidden_handler,
                                 service_unavailable_handler, base_exception_handler)
-from src.models.exceptions import (ValidationError, NotFoundError, BusinessLogicError, UnauthorizedError,
+from src.core.exceptions import (ValidationError, NotFoundError, BusinessLogicError, UnauthorizedError,
                                    ForbiddenError, ServiceUnavailableError)
 
 
@@ -43,7 +42,6 @@ async def lifespan(app: FastAPI):
     except redis.exceptions.RedisError as exc:
         log_service.warning("redis_unavailable_on_startup", error=repr(exc))
 
-    app.state.http_client = httpx.AsyncClient(timeout=5)
     app.state.queue = await QueueProducer.get_instance(
         app_settings.rabbitmq_url,
         max_retries=app_settings.rabbitmq_max_retries,
@@ -77,7 +75,6 @@ async def lifespan(app: FastAPI):
         await app.state.queue.close()
 
     await app.state.redis.close()
-    await app.state.http_client.aclose()
     if app.state.llm_client is not None:
         await app.state.llm_client.close()
     await app.state.mongo.close()

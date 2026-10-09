@@ -76,7 +76,6 @@ class CacheService:
 
     async def delete_products(self, product_ids: int | list[int] | None = None):
         await self.delete_many("products:*")
-        await self.delete("products_sorted_by_price")
 
         if product_ids is not None:
             if isinstance(product_ids, int):
@@ -91,30 +90,16 @@ class CacheService:
             if isinstance(user_ids, int):
                 user_ids = [user_ids]
 
-            await self.delete(
-                *[f"user:{user_id}" for user_id in user_ids],
-                *[f"user_balance:{user_id}" for user_id in user_ids],
-                *[f"user_email:{user_id}" for user_id in user_ids]
-            )
+            await self.delete(*[f"user:{user_id}" for user_id in user_ids])
 
     async def delete_orders(self, user_ids: int | list[int] | None = None, order_ids: int | list[int] | None = None):
-        await self.delete_many("top_products:*")
-        await self.delete_many("total_revenue:*")
-        await self.delete_many("sales_report:*")
         await self.delete_many("orders:*")
-
-        await self.delete(
-            "orders_count_by_users",
-            "order_statistics"
-        )
 
         if user_ids is not None:
             if isinstance(user_ids, int):
                 user_ids = [user_ids]
 
-            await self.delete(*[f"user_orders_products:{user_id}" for user_id in user_ids],
-                              *[f"user_order_history:{user_id}" for user_id in user_ids],
-                              *[f"user_orders:{user_id}" for user_id in user_ids])
+            await self.delete(*[f"user_orders:{user_id}" for user_id in user_ids])
 
         if order_ids is not None:
             if isinstance(order_ids, int):

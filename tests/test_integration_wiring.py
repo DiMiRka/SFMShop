@@ -1,10 +1,8 @@
-from datetime import datetime
-from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
 
-from src.models.exceptions import ForbiddenError
+from src.core.exceptions import ForbiddenError
 
 
 pytestmark = pytest.mark.anyio
@@ -68,68 +66,12 @@ class SequenceDb:
         return self.results.pop(0)
 
 
-async def test_database_query_helpers_use_cache_and_shape_data(monkeypatch):
-    from src.database import queries
-
-    cache = FakeCache()
-    monkeypatch.setattr(queries, "cache", cache)
-
-    product = SimpleNamespace(id=1, name="Mouse", price=Decimal("10.00"), quantity=2, created_at=datetime(2026, 1, 1))
-    item = SimpleNamespace(product=product, product_id=1, quantity=2, price=Decimal("10.00"))
-    order = SimpleNamespace(id=5, user_id=1, total=Decimal("20.00"), created_at=SimpleNamespace(isoformat=lambda: "date"), items=[item])
-
-    assert await queries.get_orders_with_products(SequenceDb(QueryResult([order])), 1) == [
-        {"order_id": 5, "product": "Mouse", "quantity": 2, "price": Decimal("10.00")}
-    ]
-
-    row = SimpleNamespace(id=1, name="Dima", orders_count=3)
-    assert await queries.get_orders_count_by_users(SequenceDb(QueryResult([row]))) == [
-        {"user_id": 1, "name": "Dima", "orders_count": 3}
-    ]
-
-    assert (await queries.get_products_sorted_by_price(SequenceDb(QueryResult([product]))))[0]["name"] == "Mouse"
-
-    history_row = SimpleNamespace(
-        order_id=5,
-        created_at=SimpleNamespace(isoformat=lambda: "date"),
-        product_name="Mouse",
-        product_price=Decimal("10.00"),
-        order_quantity=2,
-    )
-    assert await queries.get_user_order_history(SequenceDb(QueryResult([history_row])), 1) == [
-        {"order_id": 5, "created_at": "date", "product_name": "Mouse", "product_price": 10.0, "quantity": 2}
-    ]
-
-    stats_row = SimpleNamespace(id=1, name="Dima", order_count=2, total_amount=Decimal("50.00"))
-    assert await queries.get_order_statistics(SequenceDb(QueryResult([stats_row]))) == [
-        {"user_id": 1, "name": "Dima", "order_count": 2, "total_amount": 50.0}
-    ]
-
-    top_row = SimpleNamespace(id=1, name="Mouse", total_sold=4)
-    assert await queries.get_top_products(SequenceDb(QueryResult([top_row])), limit=1) == [
-        {"id": 1, "name": "Mouse", "total_sold": 4}
-    ]
-
-    assert await queries.generate_sales_report(
-        SequenceDb(QueryResult(), QueryResult(scalar=Decimal("100.00")), QueryResult(scalar=2)),
-        "2026-01-01",
-    ) == {"total": Decimal("100.00"), "count": 2}
-
-    assert await queries.calculate_total_revenue(
-        SequenceDb(QueryResult(one=(Decimal("100.00"), 2))),
-        "2026-01-01",
-        "2026-01-31",
-    ) == {"total": Decimal("100.00"), "count": 2, "average": 50.0}
-
-
 async def test_dependency_factories_and_current_user(monkeypatch):
     from src.core import dependencies as deps
 
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(redis="redis", cache="cache", queue="queue", http_client="http")))
-    assert deps.get_redis(request) == "redis"
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(cache="cache", queue="queue")))
     assert deps.get_cache(request) == "cache"
     assert deps.get_queue(request) == "queue"
-    assert deps.get_http_client(request) == "http"
 
     db = object()
     assert (await deps.get_product_write_repository(db)).db is db
@@ -158,21 +100,6 @@ async def test_dependency_factories_and_current_user(monkeypatch):
     monkeypatch.setattr(deps, "decode_token", lambda token: async_value(None))
     with pytest.raises(Exception):
         await deps.get_current_user(SequenceDb(QueryResult(scalar=user)), token="bad")
-
-    class Client:
-        def __init__(self, *args, **kwargs):
-            self.closed = False
-
-        async def close(self):
-            self.closed = True
-
-    monkeypatch.setattr(deps, "ExchangeRateClient", Client)
-    exchange_gen = deps.get_exchange_client()
-    exchange_client = await anext(exchange_gen)
-    assert isinstance(exchange_client, Client)
-    with pytest.raises(StopAsyncIteration):
-        await anext(exchange_gen)
-    assert exchange_client.closed
 
 
 async def async_value(value):
@@ -233,13 +160,6 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
             redis_client.options = kwargs
             return redis_client
 
-    class HttpClient:
-        def __init__(self, timeout):
-            self.timeout = timeout
-
-        async def aclose(self):
-            self.closed = True
-
     class Queue:
         connection = SimpleNamespace(is_closed=False)
 
@@ -267,7 +187,6 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
     metrics_ports = []
     monkeypatch.setattr(main, "start_metrics_server", metrics_ports.append)
     monkeypatch.setattr(main.redis.asyncio, "Redis", RedisFactory)
-    monkeypatch.setattr(main.httpx, "AsyncClient", HttpClient)
     monkeypatch.setattr(main, "QueueProducer", QueueProducer)
     monkeypatch.setattr(main, "QueueConsumer", Consumer)
 
@@ -303,7 +222,6 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
     async with main.lifespan(app):
         assert app.state.redis.pinged
         assert app.state.redis.options["socket_connect_timeout"] <= 1
-        assert app.state.http_client.timeout == 5
         assert isinstance(app.state.cache, main.CacheService)
         assert isinstance(app.state.consumer, Consumer)
         assert app.state.llm_client is llm_client

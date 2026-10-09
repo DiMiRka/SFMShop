@@ -10,7 +10,7 @@ from pymongo.errors import ServerSelectionTimeoutError
 
 from src.api.main import sfmshop_app as app
 from src.core import dependencies
-from src.models.exceptions import EventLogUnavailableError
+from src.core.exceptions import EventLogUnavailableError
 from src.repositories.event_repository import EventRepository
 from src.schemas import OrderCreate, OrderItemBase, ProductCreate, UserCreate
 from src.schemas.events import EventFilter

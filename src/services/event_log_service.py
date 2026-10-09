@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from pymongo.errors import PyMongoError
 
-from src.models.exceptions import EventLogUnavailableError
+from src.core.exceptions import EventLogUnavailableError
 from src.repositories.event_repository import EventRepository
 from src.schemas.events import EventFilter, EventResponse
 from src.services.log_service import log_service

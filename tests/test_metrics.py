@@ -11,7 +11,7 @@ from src.api.main import sfmshop_app as app
 from src.clients.llm import LLMResult, ToolCall
 from src.core import dependencies
 from src.core.metrics import start_metrics_server
-from src.models.exceptions import LLMUnavailableError
+from src.core.exceptions import LLMUnavailableError
 from src.schemas import OrderCreate, OrderItemBase
 from src.services.cache_service import CacheService
 from src.services.order_service import OrderService

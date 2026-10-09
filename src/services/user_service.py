@@ -1,4 +1,3 @@
-from decimal import Decimal
 from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
 
@@ -163,30 +162,6 @@ class UserService:
         )
 
         return {"id": user_id, "message": " Пользователь удален"}
-
-    async def get_user_balance(self, user_id: int) -> Decimal:
-        async def fetch():
-            balance = await self.user_rep.get_balance(user_id)
-
-            if balance is None:
-                logger.warning(f"User id={user_id} not found")
-                raise NotFoundError("Пользователь не найден")
-
-            return balance
-
-        return await self.cache.get_or_set_cache(f"user_balance:{user_id}", fetch)
-
-    async def get_user_email(self, user_id):
-        async def fetch():
-            email = await self.user_rep.get_email(user_id)
-
-            if email is None:
-                logger.warning(f"User id={user_id} not found")
-                raise NotFoundError("Пользователь не найден")
-
-            return email
-
-        return await self.cache.get_or_set_cache(f"user_email:{user_id}", fetch)
 
     async def get_user_orders(self, user_id: int):
         async def fetch():

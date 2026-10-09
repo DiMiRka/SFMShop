@@ -8,7 +8,7 @@ from src.clients.llm import (AssistantMessage, LLMClient, LLMMessage, LLMResult,
                              ToolResultsMessage, UserMessage)
 from src.database.models import User
 from src.core.metrics import ASSISTANT_REQUESTS, ASSISTANT_TOOL_CALLS
-from src.models.exceptions import LLMUnavailableError, NotFoundError
+from src.core.exceptions import LLMUnavailableError, NotFoundError
 from src.schemas.assistant import AssistantResponse
 from src.services.assistant.tools import TOOLS, Tool, ToolContext, ToolOutput
 from src.services.log_service import log_service

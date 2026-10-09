@@ -52,15 +52,6 @@ class AppSettings(BaseSettings):
     sentry_dsn: str | None = None
     debug: bool = False
 
-    exchange_api_urls: list[str] = Field(default_factory=lambda: [
-        "https://api.exchangerate-api.com/v4/latest",
-        "https://api.currencyapi.com/v3/latest",
-        "https://api.fixer.io/latest",
-    ])
-    exchange_timeout: float = 5.0
-    exchange_max_retries: int = 3
-    exchange_backoff_base: float = 2.0
-
     llm_provider: str = "anthropic"
     anthropic_api_key: str | None = None
     llm_model: str = "claude-opus-5-5"

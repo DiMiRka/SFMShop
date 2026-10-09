@@ -17,10 +17,6 @@ class ProductRepository(BaseRepository):
         result = await self.db.execute(select(Product).offset(offset).limit(limit))
         return list(result.scalars().all())
 
-    async def get_by_ids(self, ids: list[int]) -> list[Product]:
-        result = await self.db.execute(select(Product).where(Product.id.in_(ids)))
-        return list(result.scalars().all())
-
     async def get_by_id(self, product_id: int) -> Product | None:
         result = await self.db.execute(select(Product).where(Product.id == product_id))
         return result.scalar_one_or_none()

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from src.models.exceptions import BusinessLogicError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
+from src.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
 from src.database.models import Product as DbProduct, User as DbUser
 from src.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 from src.core.security import get_password_hash, verify_password
@@ -135,12 +135,6 @@ class UserRepoFake:
     async def delete(self, user):
         self.deleted = user
 
-    async def get_balance(self, user_id):
-        return self.user.balance if self.user is not None and user_id == self.user.id else None
-
-    async def get_email(self, user_id):
-        return self.user.email if self.user is not None and user_id == self.user.id else None
-
 
 class OrderRepoFake:
     def __init__(self):
@@ -260,8 +254,6 @@ async def test_user_service_success_auth_and_not_found():
         "message": "Пользователь обновлен",
     }
     assert await service.delete_user(1) == {"id": 1, "message": " Пользователь удален"}
-    assert await service.get_user_balance(1) == Decimal("100.00")
-    assert await service.get_user_email(1) == "dima@test.com"
     assert (await service.get_user_orders(1))[0]["id"] == 7
 
     with pytest.raises(NotFoundError):
@@ -270,10 +262,6 @@ async def test_user_service_success_auth_and_not_found():
         await service.update_user(999, UserUpdatePatch(name="Nope"))
     with pytest.raises(NotFoundError):
         await service.delete_user(999)
-    with pytest.raises(NotFoundError):
-        await service.get_user_balance(999)
-    with pytest.raises(NotFoundError):
-        await service.get_user_email(999)
 
 
 async def test_user_service_password_change_is_hashed_and_usable_for_login():

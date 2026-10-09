@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from src.clients.llm.base import (AssistantMessage, LLMMessage, LLMResult, StopReason, ToolCall, ToolResultsMessage,
                                   ToolSpec, UserMessage)
-from src.models.exceptions import LLMUnavailableError
+from src.core.exceptions import LLMUnavailableError
 from src.services.log_service import log_service
 
 

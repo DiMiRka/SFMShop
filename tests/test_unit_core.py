@@ -19,12 +19,7 @@ from src.core.security import (
     get_password_hash,
     verify_password,
 )
-from src.models.descriptors import AgeDescriptor, CachedProperty, EmailDescriptor, PositiveNumber
-from src.models.exceptions import BusinessLogicError, NotFoundError, UnauthorizedError, ValidationError
-from src.models.mixins import LoggableMixin, SerializableMixin
-from src.models.order import Order, OrderCalculator, OrderValidator
-from src.models.product import Product
-from src.models.user import User
+from src.core.exceptions import BusinessLogicError, NotFoundError, UnauthorizedError, ValidationError
 from src.schemas import (
     OrderCreate,
     OrderItemBase,
@@ -42,7 +37,6 @@ from src.schemas import (
 )
 from src.schemas.orders import OrderItemResponse
 from src.services.cache_service import CacheService
-from src.services.notifications_service import EmailNotification, SMSNotification, send_notification
 
 
 pytestmark = pytest.mark.anyio
@@ -98,57 +92,6 @@ async def test_cache_service_roundtrip_and_invalidation_helpers():
     assert "product:1" in redis.deleted
     assert "user:3" in redis.deleted
     assert "order:5" in redis.deleted
-
-
-def test_descriptors_models_and_mixins(log_messages):
-    product = Product("Monitor", 100, 2)
-    user = User(1, "Dima", "dima@test.com", 31, 1000)
-    order = Order(user, [product])
-
-    assert product.to_json() == {"name": "Monitor", "price": 100, "quantity": 2}
-    assert user.to_json()["orders_count"] == 0
-    assert order.calculate_total() == 200
-    assert OrderCalculator.calculate_discount(order, 10) == 180
-    assert OrderValidator.validate(order) is True
-
-    with pytest.raises(ValueError):
-        Product("Bad", -1, 1)
-    with pytest.raises(ValueError):
-        User(1, "Bad", "invalid", 18, 10)
-    with pytest.raises(ValueError):
-        User(1, "Bad", "bad@test.com", 1.5, 10)
-    with pytest.raises(ValueError):
-        OrderValidator.validate(Order(user, []))
-    with pytest.raises(ValueError):
-        OrderValidator.validate(Order(None, [product]))
-
-    product._quantity = 0
-    with pytest.raises(ValueError):
-        OrderValidator.validate(Order(user, [product]))
-
-    class Expensive:
-        calls = 0
-
-        @CachedProperty
-        def value(self):
-            self.calls += 1
-            return 5
-
-    item = Expensive()
-    assert item.value == 5
-    assert item.value == 5
-    assert item.calls == 1
-    assert isinstance(Expensive.value, CachedProperty)
-    assert isinstance(Product.price, PositiveNumber)
-    assert isinstance(User.email, EmailDescriptor)
-    assert isinstance(User.age, AgeDescriptor)
-
-    LoggableMixin().log("hello")
-    assert "[LoggableMixin] hello" in log_messages
-    serializable = SerializableMixin()
-    serializable.name = "obj"
-    assert serializable.to_dict() == {"name": "obj"}
-    assert '"name": "obj"' in serializable.to_json()
 
 
 def test_schemas_validate_and_serialize():
@@ -222,12 +165,7 @@ async def test_security_tokens_and_passwords():
     assert await decode_token("not-a-token") is None
 
 
-async def test_notifications_and_api_exception_handlers(log_messages):
-    assert await EmailNotification().send("hello") == "Email: hello"
-    assert "Email: hello" in log_messages
-    assert await SMSNotification().send("hello") == "SMS: hello"
-    assert await send_notification(SMSNotification(), "hello") is None
-
+async def test_api_exception_handlers():
     cases = [
         (validation_exception_handler, ValidationError("bad"), 400),
         (validation_notfound_handler, NotFoundError("missing"), 404),

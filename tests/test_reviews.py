@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from src.api.main import sfmshop_app as app
 from src.core import dependencies
 from src.database.models import Review
-from src.models.exceptions import BusinessLogicError, ForbiddenError, NotFoundError
+from src.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError
 from src.repositories.order_repository import OrderRepository
 from src.repositories.product_repository import ProductRepository
 from src.repositories.review_repository import ReviewRepository

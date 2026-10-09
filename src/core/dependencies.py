@@ -1,7 +1,5 @@
 from fastapi import Depends, Request, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-import redis
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Annotated
@@ -14,22 +12,15 @@ from src.core.security import decode_token
 from src.core.permissions import ensure_active, ensure_admin
 from src.schemas import TokenData
 from src.repositories import ProductRepository, OrderRepository, UserRepository, ReviewRepository
-from src.services import (ProductService, UserService, OrderService, ExchangeRateClient)
+from src.services import ProductService, UserService, OrderService
 from src.core.config import app_settings
 from src.clients.llm import LLMClient
-from src.models.exceptions import LLMUnavailableError
+from src.core.exceptions import LLMUnavailableError
 from src.services.assistant import AssistantService
 from src.services.health_service import HealthService
 from src.services.event_log_service import EventLogService
 from src.services.review_service import ReviewService
 from src.database.connection import engine, engine_replica
-
-
-def get_redis(request: Request):
-    return request.app.state.redis
-
-
-redis_dependency = Annotated[redis.asyncio.Redis, Depends(get_redis)]
 
 
 def get_cache(request: Request):
@@ -44,13 +35,6 @@ def get_queue(request: Request):
 
 
 queue_dependency = Annotated[QueueProducer, Depends(get_queue)]
-
-
-def get_http_client(request: Request):
-    return request.app.state.http_client
-
-
-http_client_dependency = Annotated[httpx.AsyncClient, Depends(get_http_client)]
 
 
 def get_llm_client(request: Request) -> LLMClient:
@@ -272,21 +256,3 @@ async def get_assistant_service(
 
 
 assistant_service = Annotated[AssistantService, Depends(get_assistant_service)]
-
-
-# External clients
-# ----------------------------------------------------------------------------------------------------------------------
-async def get_exchange_client():
-    client = ExchangeRateClient(
-        api_urls=app_settings.exchange_api_urls,
-        timeout=app_settings.exchange_timeout,
-        max_retries=app_settings.exchange_max_retries,
-        backoff_base=app_settings.exchange_backoff_base,
-    )
-    try:
-        yield client
-    finally:
-        await client.close()
-
-
-exchange_client = Annotated[ExchangeRateClient, Depends(get_exchange_client)]

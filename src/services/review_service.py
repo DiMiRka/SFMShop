@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.core.permissions import ensure_owner, ensure_self_or_admin
 from src.database.models import User
-from src.models.exceptions import BusinessLogicError, ForbiddenError, NotFoundError
+from src.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError
 from src.repositories import OrderRepository, ProductRepository, ReviewRepository
 from src.schemas.reviews import ReviewCreate, ReviewList, ReviewResponse, ReviewUpdate
 from src.services.queue_producer import QueueProducer

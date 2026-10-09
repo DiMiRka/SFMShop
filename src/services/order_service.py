@@ -7,7 +7,7 @@ from src.services.queue_producer import QueueProducer
 from src.core.metrics import ORDERS_CREATED
 from src.schemas import (OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate,
                          OrderInDB, OrderItemsInDB)
-from src.models.exceptions import InsufficientStockError, BusinessLogicError, NotFoundError, ValidationError
+from src.core.exceptions import InsufficientStockError, BusinessLogicError, NotFoundError, ValidationError
 
 
 class OrderService:

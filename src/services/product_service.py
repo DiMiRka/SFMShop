@@ -5,7 +5,7 @@ from src.repositories.product_repository import ProductRepository
 from src.services.cache_service import CacheService
 from src.services.queue_producer import QueueProducer
 from src.schemas import ProductResponse, ProductCreate, ProductUpdate, ProductDetailResponse
-from src.models.exceptions import NotFoundError
+from src.core.exceptions import NotFoundError
 
 
 class ProductService:

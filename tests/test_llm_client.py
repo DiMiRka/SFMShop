@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from src.clients.llm import (AnthropicLLMClient, AssistantMessage, LLMResult, ToolCall, ToolResult,
                              ToolResultsMessage, ToolSpec, UserMessage, create_llm_client)
 from src.core.config import AppSettings
-from src.models.exceptions import LLMUnavailableError
+from src.core.exceptions import LLMUnavailableError
 
 
 pytestmark = pytest.mark.anyio

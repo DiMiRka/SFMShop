@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.models.exceptions import ValidationError
+from src.core.exceptions import ValidationError
 from src.schemas import OrderCreate, OrderItemBase
 from src.services.order_service import OrderService
 

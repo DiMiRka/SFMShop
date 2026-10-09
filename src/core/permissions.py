@@ -1,6 +1,6 @@
 from src.core.security import verify_password
 from src.database.models import User
-from src.models.exceptions import ForbiddenError, ValidationError
+from src.core.exceptions import ForbiddenError, ValidationError
 from src.schemas.users import ADMIN_ONLY_USER_FIELDS, UserUpdatePatch
 
 

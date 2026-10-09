@@ -1,7 +1,7 @@
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
-from src.models.exceptions import (
+from src.core.exceptions import (
     ValidationError,
     NotFoundError,
     UnauthorizedError,

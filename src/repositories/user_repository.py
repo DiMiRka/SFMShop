@@ -1,6 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from decimal import Decimal
 
 from src.repositories.base_repository import BaseRepository
 from src.database.models import User
@@ -43,11 +42,3 @@ class UserRepository(BaseRepository):
 
     async def delete(self, user: User) -> None:
         await self.db.delete(user)
-
-    async def get_balance(self, user_id: int) -> Decimal | None:
-        result = await self.db.execute(select(User.balance).where(User.id == user_id))
-        return result.scalar_one_or_none()
-
-    async def get_email(self, user_id: int) -> str | None:
-        result = await self.db.execute(select(User.email).where(User.id == user_id))
-        return result.scalar_one_or_none()
