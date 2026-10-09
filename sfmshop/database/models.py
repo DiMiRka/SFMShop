@@ -5,6 +5,8 @@ from typing import List
 from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Text, UniqueConstraint, false, func
 from sqlalchemy.orm import DeclarativeBase, relationship, mapped_column, Mapped
 
+from sfmshop.core.order_status import OrderStatus
+
 
 class Base(DeclarativeBase):
     pass
@@ -46,6 +48,13 @@ class Order(Base):
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
     total: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        CheckConstraint(f"status IN ({', '.join(repr(s.value) for s in OrderStatus)})", name="check_order_status"),
+        nullable=False,
+        default=OrderStatus.PENDING,
+        server_default=OrderStatus.PENDING.value,
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="orders", passive_deletes=True)

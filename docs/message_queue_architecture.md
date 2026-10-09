@@ -1,21 +1,23 @@
 # Очередь сообщений в SFMShop
 
 Сервисы после изменения данных публикуют события в RabbitMQ, консьюмер обрабатывает их асинхронно\
-Сейчас события сбрасывают кэш в Redis, пишутся в журнал событий в MongoDB и запускают уведомление о новом заказе\
+Сейчас события сбрасывают кэш в Redis, пишутся в журнал событий в MongoDB и запускают уведомление об оплаченном заказе\
 Код: `sfmshop/services/queue_producer.py` и `sfmshop/services/queue_consumer.py`
 
 ## Поток
 
 ```text
-POST /v1/orders → OrderService → commit в БД → publish order.created → order_exchange
-                                                                          ├→ cache_queue        → сброс кэша
-                                                                          ├→ event_log_queue    → журнал в MongoDB
-                                                                          └→ notification_queue → уведомление
+POST /v1/orders → OrderService → commit заказа → publish order.created ─────────────┐
+                              → commit оплаты → publish order.paid / payment_failed ─┴→ order_exchange
+                                                                                         ├→ cache_queue        → сброс кэша
+                                                                                         ├→ event_log_queue    → журнал в MongoDB
+                                                                                         └→ notification_queue → уведомление (только order.paid)
 ```
 
 Каждый сервис меняет данные внутри `async with db.begin()` и публикует событие только после выхода из блока, то есть после коммита\
 Иначе консьюмер мог бы сбросить кэш раньше коммита, и параллельное чтение снова закэшировало бы старые данные на время TTL\
-Порядок «коммит, потом событие» проверяет тест `test_event_is_published_only_after_commit` для всех восьми событий
+Порядок «коммит, потом событие» проверяет тест `test_event_is_published_only_after_commit` для событий товаров, пользователей и заказов,
+а создание заказа публикует два события, каждое после своей транзакции
 
 ## События
 
@@ -26,7 +28,7 @@ POST /v1/orders → OrderService → commit в БД → publish order.created �
 | `product_exchange` | `product.created`, `product.updated`, `product.deleted` | `ProductService` | `product_ids` |
 | `product_exchange` | `review.created`, `review.updated`, `review.deleted` | `ReviewService` | `review_ids`, `product_ids`, `user_ids` |
 | `user_exchange` | `user.created`, `user.updated`, `user.deleted` | `UserService` | `user_ids`; при удалении ещё `order_ids` и `product_ids` |
-| `order_exchange` | `order.created`, `order.deleted` | `OrderService` | `order_ids`, `user_ids`, `product_ids` |
+| `order_exchange` | `order.created`, `order.paid`, `order.payment_failed`, `order.cancelled`, `order.deleted` | `OrderService` | `order_ids`, `user_ids`, `product_ids` |
 
 Сообщения отправляются с `delivery_mode=PERSISTENT` и переживают перезапуск брокера\
 У каждого сообщения есть `message_id` и `timestamp`; при повторах публикации они не меняются, поэтому консьюмер журнала не записывает событие дважды
@@ -37,7 +39,7 @@ POST /v1/orders → OrderService → commit в БД → publish order.created �
 | --- | --- | --- |
 | `cache_queue` | все события выше | удаляет ключи кэша товаров, пользователей и заказов |
 | `event_log_queue` | все события выше | пишет событие в журнал в MongoDB, см. [database.md](database.md) |
-| `notification_queue` | `order.created` | уведомление о заказе (сейчас запись в лог вместо email) |
+| `notification_queue` | `order.paid` | уведомление об оплаченном заказе (сейчас запись в лог вместо email) |
 
 Изменение заказа сбрасывает кэш заказов, товаров (изменились остатки) и пользователей (изменился баланс)\
 Изменение отзыва сбрасывает кэш карточки товара: в ней средний рейтинг и число отзывов

@@ -231,6 +231,7 @@ async def test_rating_purchase_and_listing_queries():
     assert await OrderRepository(purchase_db).has_purchased(1, 2) is True
     assert "JOIN orders" in purchase_db.sql
     assert "orders.user_id =" in purchase_db.sql and "order_items.product_id =" in purchase_db.sql
+    assert "orders.status =" in purchase_db.sql
 
     list_db = QueryDb(SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [])))
     assert await ReviewRepository(list_db).get_by_product(1, 10, 20) == []

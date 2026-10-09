@@ -3,6 +3,7 @@ from decimal import Decimal
 from datetime import datetime
 from typing import List
 
+from sfmshop.core.order_status import OrderStatus
 from sfmshop.schemas.base import Base
 
 
@@ -34,6 +35,7 @@ class OrderItemResponse(OrderItemBase):
 class OrderResponse(Base):
     id: int
     user_id: int
+    status: OrderStatus
     total: Decimal
     created_at: datetime
     items: List[OrderItemResponse]

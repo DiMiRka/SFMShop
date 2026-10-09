@@ -1,6 +1,7 @@
 # Выделение микросервиса: payment-service
 
-Проект пока монолит: оплата заказа это списание с баланса пользователя внутри транзакции `OrderService.create_order`\
+Проект пока монолит: оплата заказа это списание с баланса пользователя в `OrderService.pay_order`,
+отдельной транзакцией после создания заказа со статусом `pending`\
 Документ описывает, как вынести оплату в отдельный payment-service\
 В основном сервисе для этого уже есть заготовка клиента `sfmshop/clients/payment_client.py`
 
@@ -114,7 +115,7 @@ Order Service ──POST /api/v1/payments──→ Payment Service ──POST /u
       └──────────────── ответ ─────────────────┘
 ```
 
-1. Order Service создаёт заказ со статусом `pending` (поле статуса заказа появится вместе с сервисом)
+1. Order Service создаёт заказ со статусом `pending` (статусы и переходы уже есть в `sfmshop/core/order_status.py`)
 2. Order Service вызывает `POST /api/v1/payments`
 3. Payment Service списывает средства через user-service: `GET /users/{id}/balance` и `POST /users/{id}/withdraw`
 4. по ответу Order Service переводит заказ в `paid` или `failed`

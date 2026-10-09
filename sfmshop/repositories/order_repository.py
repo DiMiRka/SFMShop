@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
+from sfmshop.core.order_status import OrderStatus
 from sfmshop.repositories.base_repository import BaseRepository
 from sfmshop.database.models import Order, OrderItem
 
@@ -30,6 +31,7 @@ class OrderRepository(BaseRepository):
             options(selectinload(Order.items)).
             where(Order.id == order_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
@@ -71,7 +73,7 @@ class OrderRepository(BaseRepository):
         result = await self.db.execute(
             select(OrderItem.id)
             .join(Order, OrderItem.order_id == Order.id)
-            .where(Order.user_id == user_id, OrderItem.product_id == product_id)
+            .where(Order.user_id == user_id, Order.status == OrderStatus.PAID, OrderItem.product_id == product_id)
             .limit(1)
         )
         return result.scalar_one_or_none() is not None

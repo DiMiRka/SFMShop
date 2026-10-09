@@ -129,7 +129,8 @@ def test_order_charges_balance_reduces_stock_and_lands_in_event_log(client, admi
 
     response = client.post("/v1/orders/", json={"items": [{"product_id": product_id, "quantity": 2}]}, headers=headers)
     assert response.status_code == 201, response.text
-    order_id = response.json()["order_id"]
+    assert response.json()["status"] == "paid"
+    order_id = response.json()["id"]
 
     assert Decimal(client.get(f"/v1/users/{user['id']}", headers=headers).json()["balance"]) == Decimal("759.00")
     eventually(lambda: client.get(f"/v1/products/{product_id}").json()["quantity"] == 3)
@@ -141,6 +142,29 @@ def test_order_charges_balance_reduces_stock_and_lands_in_event_log(client, admi
 
     [event] = eventually(logged)
     assert event["user_ids"] == [user["id"]] and event["product_ids"] == [product_id]
+
+
+def test_unpaid_order_fails_then_cancel_returns_stock(client, admin):
+    user, email = register(client, "poor")
+    headers = login(client, email)
+    product_id = create_product(client, admin, price="50.00", quantity=4)
+
+    response = client.post("/v1/orders/", json={"items": [{"product_id": product_id, "quantity": 3}]}, headers=headers)
+    assert response.status_code == 201, response.text
+    order = response.json()
+    assert order["status"] == "failed" and order["total"] == "150.00" and order["created_at"]
+    eventually(lambda: client.get(f"/v1/products/{product_id}").json()["quantity"] == 1)
+
+    review = {"rating": 5, "text": "Не оплачен"}
+    assert client.post(f"/v1/products/{product_id}/reviews", json=review, headers=headers).status_code == 403
+
+    cancelled = client.post(f"/v1/orders/{order['id']}/cancel", headers=headers)
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+    assert client.post(f"/v1/orders/{order['id']}/pay", headers=headers).status_code == 409
+
+    eventually(lambda: client.get(f"/v1/products/{product_id}").json()["quantity"] == 4)
+    eventually(lambda: client.get(f"/v1/orders/{order['id']}", headers=headers).json()["status"] == "cancelled")
 
 
 def test_only_buyer_can_review_and_rating_appears_in_card(client, admin, buyer):

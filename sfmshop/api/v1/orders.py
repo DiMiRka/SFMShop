@@ -3,7 +3,7 @@ from typing import List
 
 
 from sfmshop.schemas import OrderCreate, OrderResponse
-from sfmshop.core.dependencies import current_user, order_write_service, order_read_service
+from sfmshop.core.dependencies import admin_user, current_user, order_write_service, order_read_service
 from sfmshop.core.permissions import order_owner_filter
 
 orders_router = APIRouter(prefix="/orders", tags=['orders'])
@@ -15,12 +15,14 @@ async def get_orders(cu: current_user, service: order_read_service, limit: int =
     return await service.get_all_orders(order_owner_filter(cu), limit, offset)
 
 
-@orders_router.get("/{order_id}", summary="Получить заказ", status_code=status.HTTP_200_OK)
+@orders_router.get("/{order_id}", summary="Получить заказ",
+                   response_model=OrderResponse, status_code=status.HTTP_200_OK)
 async def get_order(cu: current_user, service: order_read_service, order_id: int):
     return await service.get_order_by_id(order_id, order_owner_filter(cu))
 
 
-@orders_router.post("/", summary="Создать новый заказ", status_code=status.HTTP_201_CREATED)
+@orders_router.post("/", summary="Создать и оплатить заказ",
+                    response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def post_order(
         request: Request,
         cu: current_user,
@@ -32,6 +34,18 @@ async def post_order(
     return result
 
 
-@orders_router.delete("/{order_id}", summary="Удалить заказ", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_order(cu: current_user, service: order_write_service, order_id: int):
-    return await service.delete_order(order_id, order_owner_filter(cu))
+@orders_router.post("/{order_id}/pay", summary="Повторить оплату заказа",
+                    response_model=OrderResponse, status_code=status.HTTP_200_OK)
+async def pay_order(cu: current_user, service: order_write_service, order_id: int):
+    return await service.pay_order(order_id, order_owner_filter(cu))
+
+
+@orders_router.post("/{order_id}/cancel", summary="Отменить заказ",
+                    response_model=OrderResponse, status_code=status.HTTP_200_OK)
+async def cancel_order(cu: current_user, service: order_write_service, order_id: int):
+    return await service.cancel_order(order_id, order_owner_filter(cu))
+
+
+@orders_router.delete("/{order_id}", summary="Удалить заказ (администратор)", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_order(cu: admin_user, service: order_write_service, order_id: int):
+    return await service.delete_order(order_id)

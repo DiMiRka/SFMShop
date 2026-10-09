@@ -5,7 +5,8 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from sfmshop.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
+from sfmshop.core.order_status import OrderStatus
+from sfmshop.core.exceptions import ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
 from sfmshop.database.models import Product as DbProduct, User as DbUser
 from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 from sfmshop.core.security import get_password_hash, verify_password
@@ -143,10 +144,12 @@ class OrderRepoFake:
         self.order = SimpleNamespace(
             id=7,
             user_id=1,
+            status=OrderStatus.PAID,
             total=Decimal("20.00"),
             created_at=datetime(2026, 1, 1),
             items=[item],
         )
+        self.orders = {7: self.order}
         self.created_items = []
         self.deleted = None
 
@@ -154,7 +157,7 @@ class OrderRepoFake:
         return [self.order]
 
     async def get_by_id(self, order_id):
-        return self.order if order_id == self.order.id else None
+        return self.orders.get(order_id)
 
     async def get_by_id_for_update(self, order_id):
         return await self.get_by_id(order_id)
@@ -176,10 +179,13 @@ class OrderRepoFake:
 
     async def create(self, data):
         self.created = data
+        self.orders[77] = SimpleNamespace(
+            **{"id": 77, "status": OrderStatus.PENDING, "created_at": datetime(2026, 1, 1), **data})
         return 77
 
     async def create_order_item(self, data):
         self.created_items.append(data)
+        self.orders[data["order_id"]].items.append(SimpleNamespace(**data))
         return data
 
     async def delete(self, order):
@@ -313,18 +319,25 @@ async def test_order_service_success_and_error_paths():
     queue = FakeQueue()
     service = OrderService(orders, users, products, FakeCache(), queue)
 
-    assert (await service.get_all_orders(1, 10, 0))[0]["items"][0]["total"] == 20.0
+    assert (await service.get_all_orders(1, 10, 0))[0]["items"][0]["total"] == "20.00"
     assert (await service.get_order_by_id(7, 1))["id"] == 7
 
     order_create = OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)])
     created = await service.create_order(1, order_create)
-    assert created["order_id"] == 77
-    assert created["total"] == 20.0
+    assert created == {
+        "id": 77,
+        "user_id": 1,
+        "status": "paid",
+        "total": "20.00",
+        "created_at": "2026-01-01T00:00:00",
+        "items": [{"product_id": 1, "quantity": 2, "total": "20.00"}],
+    }
     assert products.product.quantity == 3
     assert users.user.balance == Decimal("80.00")
     assert orders.created_items[0]["order_id"] == 77
+    assert [event[1] for event in queue.events] == ["order.created", "order.paid"]
 
-    deleted = await service.delete_order(7, 1)
+    deleted = await service.delete_order(7)
     assert deleted["id"] == 7
     assert queue.events[-1][1] == "order.deleted"
 
@@ -338,7 +351,7 @@ async def test_order_service_success_and_error_paths():
     with pytest.raises(ValidationError):
         await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=0)]))
     with pytest.raises(NotFoundError):
-        await service.delete_order(999, 1)
+        await service.delete_order(999)
 
     users.user = None
     with pytest.raises(NotFoundError):
@@ -359,7 +372,10 @@ async def test_order_service_hides_foreign_orders():
     assert await service.get_all_orders(stranger_id) == []
 
     with pytest.raises(NotFoundError):
-        await service.delete_order(7, stranger_id)
+        await service.pay_order(7, stranger_id)
+    with pytest.raises(NotFoundError):
+        await service.cancel_order(7, stranger_id)
+    assert orders.order.status == OrderStatus.PAID
     assert orders.deleted is None
     assert users.updated is None
     assert products.updated is None
@@ -381,7 +397,7 @@ async def test_order_service_admin_manages_any_order():
     assert ("orders:all:100:0", 900) in cache.calls
     assert (await service.get_order_by_id(7, all_users))["user_id"] == 1
 
-    await service.delete_order(7, all_users)
+    await service.delete_order(7)
     assert orders.deleted is orders.order
     refunded_user, data = users.updated
     assert refunded_user.id == 1
@@ -403,8 +419,10 @@ async def test_order_service_stock_balance_and_product_errors():
 
     products.product.quantity = 5
     users.user.balance = Decimal("1.00")
-    with pytest.raises(BusinessLogicError):
-        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
+    created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
+    assert created["status"] == "failed"
+    assert users.user.balance == Decimal("1.00")
+    assert products.product.quantity == 3
 
 
 async def test_balance_with_kopecks_survives_refund_and_profile():
@@ -421,7 +439,7 @@ async def test_balance_with_kopecks_survives_refund_and_profile():
     products.get_by_ids_for_update = lambda ids: async_return([p for p in products.products if p.id in ids])
     service = OrderService(orders, users, products, FakeCache(), FakeQueue())
 
-    await service.delete_order(7, 1)
+    await service.delete_order(7)
 
     assert users.user.balance == Decimal("120.75")
     assert products.product.quantity == 7

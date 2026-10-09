@@ -82,11 +82,12 @@ def test_create_order_with_mocked_service_and_auth():
     service = MagicMock()
     service.create_order = AsyncMock(
         return_value={
-            "order_id": 42,
+            "id": 42,
             "user_id": 1,
-            "products_id": [2],
-            "quantity": [1],
-            "total": 300.0,
+            "status": "paid",
+            "total": "300.00",
+            "created_at": "2026-01-01T00:00:00",
+            "items": [{"product_id": 2, "quantity": 1, "total": "300.00"}],
         }
     )
 
@@ -104,8 +105,9 @@ def test_create_order_with_mocked_service_and_auth():
 
     assert response.status_code == 201
     data = response.json()
-    assert data["order_id"] == 42
+    assert data["id"] == 42
     assert data["user_id"] == 1
+    assert data["status"] == "paid"
     service.create_order.assert_awaited_once()
     assert service.create_order.await_args.args[0] == 1
 
@@ -125,7 +127,7 @@ class PassThroughCache:
 
 def build_order_service_with_foreign_order():
     foreign_order = SimpleNamespace(
-        id=7, user_id=2, total=Decimal("20.00"), created_at=datetime(2026, 1, 1), items=[]
+        id=7, user_id=2, status="pending", total=Decimal("20.00"), created_at=datetime(2026, 1, 1), items=[]
     )
     order_rep = MagicMock()
     order_rep.db.begin.return_value = BeginContext()
@@ -158,7 +160,7 @@ def test_user_without_orders_gets_empty_list():
     assert response.json() == []
 
 
-def test_foreign_order_is_not_visible_and_cannot_be_deleted():
+def test_foreign_order_is_not_visible_and_cannot_be_changed():
     service, order_rep, user_rep, queue = build_order_service_with_foreign_order()
 
     async def override_order_service():
@@ -168,11 +170,11 @@ def test_foreign_order_is_not_visible_and_cannot_be_deleted():
     app.dependency_overrides[dependencies.get_order_read_service] = override_order_service
     app.dependency_overrides[dependencies.get_order_write_service] = override_order_service
 
-    get_response = client.get("/v1/orders/7")
-    delete_response = client.delete("/v1/orders/7")
-
-    assert get_response.status_code == 404
-    assert delete_response.status_code == 404
+    assert client.get("/v1/orders/7").status_code == 404
+    assert client.post("/v1/orders/7/pay").status_code == 404
+    assert client.post("/v1/orders/7/cancel").status_code == 404
+    assert client.delete("/v1/orders/7").status_code == 403
+    assert order_rep.get_by_id_for_update.await_count == 2
     order_rep.delete.assert_not_awaited()
     user_rep.update.assert_not_awaited()
     queue.publish_event.assert_not_awaited()

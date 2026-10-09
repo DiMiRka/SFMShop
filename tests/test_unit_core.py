@@ -145,6 +145,7 @@ def test_schemas_validate_and_serialize():
     assert OrderResponse(
         id=1,
         user_id=1,
+        status="pending",
         total=Decimal("20.00"),
         created_at=datetime(2026, 1, 1),
         items=[OrderItemResponse(product_id=1, quantity=2, total=Decimal("20.00"))],

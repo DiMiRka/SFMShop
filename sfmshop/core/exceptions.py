@@ -26,6 +26,9 @@ class InsufficientStockError(BusinessLogicError):
     pass
 
 
+class InvalidOrderStatusError(BusinessLogicError):
+    pass
+
 
 class ServiceUnavailableError(SFMShopException):
     pass

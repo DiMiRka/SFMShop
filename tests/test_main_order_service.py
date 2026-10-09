@@ -1,9 +1,12 @@
-﻿from decimal import Decimal
+﻿from datetime import datetime
+from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from sfmshop.core.exceptions import ValidationError
+from sfmshop.core.order_status import OrderStatus
 from sfmshop.schemas import OrderCreate, OrderItemBase
 from sfmshop.services.order_service import OrderService
 
@@ -24,11 +27,15 @@ def build_service():
     order_rep.db.begin.return_value = BeginContext()
     order_rep.create = AsyncMock(return_value=42)
     order_rep.create_order_item = AsyncMock()
+    order_rep.get_by_id_for_update = AsyncMock(return_value=SimpleNamespace(
+        id=42, user_id=1, status=OrderStatus.PENDING, total=Decimal("300.00"), created_at=datetime(2026, 1, 1),
+        items=[SimpleNamespace(product_id=2, quantity=1, total=Decimal("300.00"))],
+    ))
 
+    user = MagicMock(id=1, balance=Decimal("1000.00"))
     user_rep = MagicMock()
-    user_rep.get_by_id_for_update = AsyncMock(
-        return_value=MagicMock(id=1, balance=Decimal("1000.00"))
-    )
+    user_rep.get_by_id = AsyncMock(return_value=user)
+    user_rep.get_by_id_for_update = AsyncMock(return_value=user)
 
     product = MagicMock(id=2, price=Decimal("300.00"), quantity=5)
     product_rep = MagicMock()
@@ -54,13 +61,14 @@ async def test_order_service_create_order_happy_path_with_mocks():
 
     result = await service.create_order(1, order)
 
-    assert result["order_id"] == 42
-    assert result["total"] == 300.0
+    assert result["id"] == 42
+    assert result["status"] == "paid"
+    assert result["total"] == "300.00"
     user_rep.get_by_id_for_update.assert_awaited_once_with(1)
     product_rep.get_by_ids_for_update.assert_awaited_once_with([2])
     order_rep.create.assert_awaited_once()
     order_rep.create_order_item.assert_awaited_once()
-    queue.publish_event.assert_awaited_once()
+    assert [c.args[1] for c in queue.publish_event.await_args_list] == ["order.created", "order.paid"]
 
 
 async def test_order_service_empty_order_raises_and_dependencies_not_called():
@@ -71,7 +79,7 @@ async def test_order_service_empty_order_raises_and_dependencies_not_called():
     with pytest.raises(ValidationError):
         await service.create_order(1, order)
 
-    user_rep.get_by_id_for_update.assert_not_awaited()
+    user_rep.get_by_id.assert_not_awaited()
     product_rep.get_by_ids_for_update.assert_not_awaited()
     order_rep.create.assert_not_awaited()
     queue.publish_event.assert_not_awaited()

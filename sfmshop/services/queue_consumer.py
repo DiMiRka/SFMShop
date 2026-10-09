@@ -20,6 +20,9 @@ ALL_EVENTS = (
     ("product_exchange", "review.updated"),
     ("product_exchange", "review.deleted"),
     ("order_exchange", "order.created"),
+    ("order_exchange", "order.paid"),
+    ("order_exchange", "order.payment_failed"),
+    ("order_exchange", "order.cancelled"),
     ("order_exchange", "order.deleted"),
 )
 
@@ -216,7 +219,7 @@ class QueueConsumer:
     async def _setup_notification_consumer(self):
         queue = await self._declare_queue_with_retry("notification_queue")
 
-        await queue.bind(self.order_exchange, "order.created")
+        await queue.bind(self.order_exchange, "order.paid")
 
         await queue.consume(self.process_notification)
 

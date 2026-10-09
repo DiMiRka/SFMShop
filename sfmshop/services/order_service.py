@@ -5,9 +5,11 @@ from sfmshop.repositories import OrderRepository, UserRepository, ProductReposit
 from sfmshop.services.cache_service import CacheService
 from sfmshop.services.queue_producer import QueueProducer
 from sfmshop.core.metrics import ORDERS_CREATED
+from sfmshop.core.order_status import OrderStatus, ensure_transition
+from sfmshop.database.models import Order
 from sfmshop.schemas import (OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate,
-                         OrderInDB, OrderItemsInDB)
-from sfmshop.core.exceptions import InsufficientStockError, BusinessLogicError, NotFoundError, ValidationError
+                             OrderInDB, OrderItemsInDB)
+from sfmshop.core.exceptions import InsufficientStockError, NotFoundError, ValidationError
 
 
 class OrderService:
@@ -31,32 +33,12 @@ class OrderService:
             offset: int = 0,
             newest_first: bool = False) -> list[dict]:
         async def fetch():
-
             if user_id is None:
                 orders = await self.order_rep.get_all(limit, offset, newest_first=newest_first)
             else:
                 orders = await self.order_rep.get_user_orders(user_id, limit, offset, newest_first=newest_first)
 
-            orders_data = []
-
-            for order in orders:
-                orders_data.append({
-                    "id": order.id,
-                    "user_id": order.user_id,
-                    "total": float(order.total),
-                    "created_at": order.created_at,
-                    "items": [
-                        {
-                            "id": item.id,
-                            "product_id": item.product_id,
-                            "quantity": item.quantity,
-                            "total": float(item.total)
-                        }
-                        for item in order.items
-                    ]
-                })
-
-            return orders_data
+            return [self._to_response(order) for order in orders]
 
         owner_key = "all" if user_id is None else user_id
         order_key = ":desc" if newest_first else ""
@@ -70,7 +52,7 @@ class OrderService:
                 logger.warning(f"Order id={order_id} not found")
                 raise NotFoundError("Заказ не найден")
 
-            return OrderResponse.model_validate(order).model_dump(mode="json")
+            return self._to_response(order)
 
         order_data = await self.cache.get_or_set_cache(f"order:{order_id}", fetch)
 
@@ -80,7 +62,7 @@ class OrderService:
 
         return order_data
 
-    async def create_order(self, user_id: int, order: OrderCreate):
+    async def create_order(self, user_id: int, order: OrderCreate) -> dict:
         if not order.items:
             raise ValidationError("Empty order")
 
@@ -98,9 +80,7 @@ class OrderService:
 
         async with self.order_rep.db.begin():
 
-            user_db = await self.user_rep.get_by_id_for_update(user_id)
-
-            if not user_db:
+            if not await self.user_rep.get_by_id(user_id):
                 logger.warning(f"User id={user_id} not found")
                 raise NotFoundError("Пользователь не найден")
 
@@ -128,11 +108,6 @@ class OrderService:
 
                 order_items_db.append((product_db.id, quantity[idx], product_total))
 
-            if user_db.balance < total:
-                raise BusinessLogicError("Недостаточно средств на балансе пользователя")
-
-            user_db.balance -= total
-
             order_data = OrderInDB(user_id=user_id, items=[], total=total).model_dump(exclude_unset=True)
 
             order_db_id = await self.order_rep.create(order_data)
@@ -148,66 +123,105 @@ class OrderService:
 
         ORDERS_CREATED.inc()
 
-        await self.queue.publish_event(
-                "order_exchange",
-                "order.created",
-                {
-                    "order_ids": order_db_id,
-                    "user_ids": user_id,
-                    "product_ids": product_ids
-                }
-            )
+        await self.queue.publish_event("order_exchange", "order.created",
+                                       self._event(order_db_id, user_id, product_ids))
 
-        return {
-            "order_id": order_db_id,
-            "user_id": user_id,
-            "products_id": product_ids,
-            "quantity": quantity,
-            "total": float(total),
-        }
+        return await self.pay_order(order_db_id, user_id)
 
-    async def delete_order(self, order_id: int, user_id: int | None):
+    async def pay_order(self, order_id: int, user_id: int | None) -> dict:
         async with self.order_rep.db.begin():
-            order = await self.order_rep.get_by_id_for_update(order_id)
+            order = await self._get_for_update(order_id, user_id)
+            ensure_transition(order.status, OrderStatus.PAID)
 
-            if not order or (user_id is not None and order.user_id != user_id):
-                logger.warning(f"Order id={order_id} not found for user id={user_id}")
-                raise NotFoundError("Заказ не найден")
-
-            owner_id = order.user_id
-
-            user_db = await self.user_rep.get_by_id_for_update(owner_id)
+            user_db = await self.user_rep.get_by_id_for_update(order.user_id)
 
             if not user_db:
-                logger.warning(f"User id={owner_id} not found")
+                logger.warning(f"User id={order.user_id} not found")
                 raise NotFoundError("Пользователь не найден")
 
-            new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)
+            if user_db.balance >= order.total:
+                user_db.balance -= order.total
+                order.status = OrderStatus.PAID
+            else:
+                logger.info(f"Order id={order_id} payment failed: insufficient balance")
+                order.status = OrderStatus.FAILED
 
-            await self.user_rep.update(user_db, new_user_data)
+            result = self._to_response(order)
 
-            items = await self.order_rep.get_order_products(order_id)
+        routing_key = "order.paid" if order.status == OrderStatus.PAID else "order.payment_failed"
+        await self.queue.publish_event("order_exchange", routing_key,
+                                       self._event(order_id, order.user_id, self._product_ids(order)))
 
-            product_ids = [item.product_id for item in items]
-            products = await self.product_rep.get_by_ids_for_update(product_ids)
+        return result
 
-            products_db = {p.id: p for p in products}
+    async def cancel_order(self, order_id: int, user_id: int | None) -> dict:
+        async with self.order_rep.db.begin():
+            order = await self._get_for_update(order_id, user_id)
+            ensure_transition(order.status, OrderStatus.CANCELLED)
 
-            for item in items:
-                product_db = products_db[item.product_id]
-                data = ProductUpdate(quantity=product_db.quantity + item.quantity).model_dump(exclude_unset=True)
-                await self.product_rep.update(product_db, data)
+            await self._return_stock(order)
+            order.status = OrderStatus.CANCELLED
+
+            result = self._to_response(order)
+
+        await self.queue.publish_event("order_exchange", "order.cancelled",
+                                       self._event(order_id, order.user_id, self._product_ids(order)))
+
+        return result
+
+    async def delete_order(self, order_id: int):
+        async with self.order_rep.db.begin():
+            order = await self._get_for_update(order_id, None)
+            owner_id = order.user_id
+
+            if order.status == OrderStatus.PAID:
+                user_db = await self.user_rep.get_by_id_for_update(owner_id)
+
+                if not user_db:
+                    logger.warning(f"User id={owner_id} not found")
+                    raise NotFoundError("Пользователь не найден")
+
+                new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)
+                await self.user_rep.update(user_db, new_user_data)
+
+            if order.status != OrderStatus.CANCELLED:
+                await self._return_stock(order)
+
+            product_ids = self._product_ids(order)
 
             await self.order_rep.delete(order)
 
-        await self.queue.publish_event(
-            "order_exchange",
-            "order.deleted",
-            {
-                "order_ids": order_id,
-                "user_ids": owner_id,
-                "product_ids": product_ids
-            }
-        )
+        await self.queue.publish_event("order_exchange", "order.deleted",
+                                       self._event(order_id, owner_id, product_ids))
 
         return {"id": order_id, "message": "Заказ удален"}
+
+    async def _get_for_update(self, order_id: int, user_id: int | None) -> Order:
+        order = await self.order_rep.get_by_id_for_update(order_id)
+
+        if not order or (user_id is not None and order.user_id != user_id):
+            logger.warning(f"Order id={order_id} not found for user id={user_id}")
+            raise NotFoundError("Заказ не найден")
+
+        return order
+
+    async def _return_stock(self, order: Order) -> None:
+        products = await self.product_rep.get_by_ids_for_update(self._product_ids(order))
+        products_db = {p.id: p for p in products}
+
+        for item in order.items:
+            product_db = products_db[item.product_id]
+            data = ProductUpdate(quantity=product_db.quantity + item.quantity).model_dump(exclude_unset=True)
+            await self.product_rep.update(product_db, data)
+
+    @staticmethod
+    def _product_ids(order: Order) -> list[int]:
+        return [item.product_id for item in order.items]
+
+    @staticmethod
+    def _event(order_id: int, user_id: int, product_ids: list[int]) -> dict:
+        return {"order_ids": order_id, "user_ids": user_id, "product_ids": product_ids}
+
+    @staticmethod
+    def _to_response(order: Order) -> dict:
+        return OrderResponse.model_validate(order).model_dump(mode="json")

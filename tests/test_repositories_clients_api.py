@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from sfmshop.api.v1.auth import login, refresh_token, register
-from sfmshop.api.v1.orders import delete_order, get_order, get_orders, post_order
+from sfmshop.api.v1.orders import cancel_order, delete_order, get_order, get_orders, pay_order, post_order
 from sfmshop.api.v1.products import delete_product, get_product, get_products, post_product, put_product
 from sfmshop.api.v1.users import delete_user, get_user, get_user_orders, get_users, put_user
 from sfmshop.clients.payment_client import PaymentClient
@@ -150,7 +150,9 @@ async def test_api_route_functions_delegate_to_services():
         async def get_all_orders(self, user_id, limit, offset): return ("orders", user_id, limit, offset)
         async def get_order_by_id(self, order_id, user_id): return ("order", order_id, user_id)
         async def create_order(self, user_id, order): return (user_id, len(order.items))
-        async def delete_order(self, order_id, user_id): return (order_id, user_id)
+        async def pay_order(self, order_id, user_id): return ("pay", order_id, user_id)
+        async def cancel_order(self, order_id, user_id): return ("cancel", order_id, user_id)
+        async def delete_order(self, order_id): return order_id
         async def register_user(self, user): return user.email
         async def authorized_user(self, form_data): return form_data.username
         async def create_access_token_db(self, token): return token
@@ -175,13 +177,15 @@ async def test_api_route_functions_delegate_to_services():
     assert await get_orders(cu, service, 2, 3) == ("orders", 1, 2, 3)
     assert await get_order(cu, service, 1) == ("order", 1, 1)
     assert await post_order(request, cu, service, order) == (1, 1)
-    assert await delete_order(cu, service, 1) == (1, 1)
+    assert await pay_order(cu, service, 1) == ("pay", 1, 1)
+    assert await cancel_order(cu, service, 1) == ("cancel", 1, 1)
 
 
     admin = SimpleNamespace(id=9, is_admin=True)
     assert await get_orders(admin, service, 2, 3) == ("orders", None, 2, 3)
     assert await get_order(admin, service, 1) == ("order", 1, None)
-    assert await delete_order(admin, service, 1) == (1, None)
+    assert await cancel_order(admin, service, 1) == ("cancel", 1, None)
+    assert await delete_order(admin, service, 1) == 1
 
     user = UserCreate(name="A", email="a@test.com", age=18, password="abc12345")
     assert await register(service, user) == "a@test.com"

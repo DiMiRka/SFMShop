@@ -101,7 +101,7 @@ def test_build_event_normalizes_entity_ids():
 async def test_service_events_are_stored_with_entity_ids(operation, routing_key, ids):
     queue = FakeQueue()
     await operation(queue)
-    _, published_key, payload = queue.events[-1]
+    _, published_key, payload = next(event for event in queue.events if event[1] == routing_key)
     collection = Collection()
     consumer, _ = build_consumer()
     consumer.events = EventRepository(collection)
@@ -234,7 +234,7 @@ async def test_event_log_queue_is_bound_to_every_event_with_retry_and_error_queu
     queue = channel.queues["event_log_queue"]
     assert sorted(queue.bindings) == sorted(queue_consumer.ALL_EVENTS)
     assert sorted(channel.queues["cache_queue"].bindings) == sorted(queue_consumer.ALL_EVENTS)
-    assert channel.queues["notification_queue"].bindings == [("order_exchange", "order.created")]
+    assert channel.queues["notification_queue"].bindings == [("order_exchange", "order.paid")]
     assert queue.arguments["x-dead-letter-routing-key"] == "event_log_queue.retry"
     assert channel.queues["event_log_queue.retry"].arguments["x-dead-letter-routing-key"] == "event_log_queue"
     assert "event_log_queue.error" in channel.queues

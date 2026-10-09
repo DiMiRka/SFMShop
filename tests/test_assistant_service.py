@@ -124,6 +124,7 @@ async def test_own_orders_are_listed_newest_first_with_money_as_strings():
     [result] = tool_results(llm.calls[1])
     assert json.loads(result.content) == [{
         "id": 7,
+        "status": "paid",
         "total": "20.00",
         "created_at": "2026-01-01T00:00:00",
         "items": [{"product_id": 1, "quantity": 2, "total": "20.00"}],

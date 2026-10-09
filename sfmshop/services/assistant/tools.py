@@ -49,6 +49,7 @@ def iso(value: Any) -> str:
 def order_summary(order: dict) -> dict:
     return {
         "id": order["id"],
+        "status": order["status"],
         "total": money(order["total"]),
         "created_at": iso(order["created_at"]),
         "items": [

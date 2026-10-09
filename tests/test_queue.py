@@ -85,13 +85,13 @@ async def test_user_delete_event_invalidates_users_orders_and_products():
     cache.delete_products.assert_awaited_once_with([1])
 
 
-async def test_order_created_event_invalidates_buyer_order_and_products():
+async def test_order_paid_event_invalidates_buyer_order_and_products():
     queue = FakeQueue()
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
     await OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), queue).create_order(1, order)
     consumer, cache = build_consumer()
 
-    assert await deliver(consumer, queue) == "order.created"
+    assert await deliver(consumer, queue) == "order.paid"
 
     cache.delete_users.assert_awaited_once_with(1)
     cache.delete_orders.assert_awaited_once_with(1, 77)
@@ -204,7 +204,8 @@ async def test_order_is_created_when_rabbitmq_is_down(monkeypatch):
 
     created = await service.create_order(1, order)
 
-    assert created["order_id"] == 77
+    assert created["id"] == 77
+    assert created["status"] == "paid"
     assert users.user.balance == Decimal("90.00")
 
 
@@ -262,23 +263,25 @@ def services_on(log):
     )
 
 
-@pytest.mark.parametrize("routing_key, operation", [
-    ("product.created", lambda p, u, o: p.create_product(ProductCreate(name="Desk", price=Decimal("10.00"), quantity=1))),
-    ("product.updated", lambda p, u, o: p.update_product(1, ProductUpdate(quantity=2))),
-    ("product.deleted", lambda p, u, o: p.delete_product(1)),
-    ("user.created", lambda p, u, o: u.register_user(
+@pytest.mark.parametrize("routing_keys, operation", [
+    (["product.created"], lambda p, u, o: p.create_product(
+        ProductCreate(name="Desk", price=Decimal("10.00"), quantity=1))),
+    (["product.updated"], lambda p, u, o: p.update_product(1, ProductUpdate(quantity=2))),
+    (["product.deleted"], lambda p, u, o: p.delete_product(1)),
+    (["user.created"], lambda p, u, o: u.register_user(
         UserCreate(name="New", email="new@test.com", age=20, password="abc12345"))),
-    ("user.updated", lambda p, u, o: u.update_user(1, UserUpdatePatch(name="Changed"))),
-    ("user.deleted", lambda p, u, o: u.delete_user(1)),
-    ("order.created", lambda p, u, o: o.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]))),
-    ("order.deleted", lambda p, u, o: o.delete_order(7, 1)),
+    (["user.updated"], lambda p, u, o: u.update_user(1, UserUpdatePatch(name="Changed"))),
+    (["user.deleted"], lambda p, u, o: u.delete_user(1)),
+    (["order.created", "order.paid"], lambda p, u, o: o.create_order(
+        1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]))),
+    (["order.deleted"], lambda p, u, o: o.delete_order(7)),
 ])
-async def test_event_is_published_only_after_commit(routing_key, operation):
+async def test_event_is_published_only_after_commit(routing_keys, operation):
     log = TransactionLog()
 
     await operation(*services_on(log))
 
-    assert log.entries == ["begin", "commit", f"publish {routing_key}"]
+    assert log.entries == [entry for key in routing_keys for entry in ("begin", "commit", f"publish {key}")]
 
 
 @pytest.mark.parametrize("connection, should_close", [
