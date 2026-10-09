@@ -40,3 +40,7 @@ class LLMUnavailableError(ServiceUnavailableError):
 
 class EventLogUnavailableError(ServiceUnavailableError):
     pass
+
+
+class PaymentUnavailableError(ServiceUnavailableError):
+    pass

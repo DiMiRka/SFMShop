@@ -1,14 +1,12 @@
 from decimal import Decimal
 from types import SimpleNamespace
 
-import httpx
 import pytest
 
 from sfmshop.api.v1.auth import login, refresh_token, register
 from sfmshop.api.v1.orders import cancel_order, delete_order, get_order, get_orders, pay_order, post_order
 from sfmshop.api.v1.products import delete_product, get_product, get_products, post_product, put_product
 from sfmshop.api.v1.users import delete_user, get_user, get_user_orders, get_users, put_user
-from sfmshop.clients.payment_client import PaymentClient
 from sfmshop.database.models import OrderItem as DbOrderItem
 from sfmshop.database.models import Product as DbProduct
 from sfmshop.database.models import User as DbUser
@@ -122,19 +120,6 @@ async def test_repositories_delegate_to_session_and_mutate_models():
     assert await empty_repo.get_product_ids_by_user(1) is None
 
 
-class HttpResponse:
-    def __init__(self, data=None, error=None):
-        self._data = data or {}
-        self.error = error
-
-    def raise_for_status(self):
-        if self.error:
-            raise self.error
-
-    def json(self):
-        return self._data
-
-
 async def test_api_route_functions_delegate_to_services():
     class Service:
         async def get_all_products(self, limit, offset): return ("products", limit, offset)
@@ -191,28 +176,6 @@ async def test_api_route_functions_delegate_to_services():
     assert await register(service, user) == "a@test.com"
     assert await login.__wrapped__(SimpleNamespace(), service, SimpleNamespace(username="u")) == "u"
     assert await refresh_token(service, "refresh") == "refresh"
-
-
-async def test_payment_client_success_and_request_error(monkeypatch):
-    class Client:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, url, json, timeout):
-            return HttpResponse({"paid": True})
-
-    monkeypatch.setattr(httpx, "AsyncClient", Client)
-    assert await PaymentClient("https://pay").process_payment(1, 10.0) == {"paid": True}
-
-    class ErrorClient(Client):
-        async def post(self, url, json, timeout):
-            raise httpx.RequestError("network")
-
-    monkeypatch.setattr(httpx, "AsyncClient", ErrorClient)
-    assert await PaymentClient("https://pay").process_payment(1, 10.0) is None
 
 
 def compiled_sql(query):

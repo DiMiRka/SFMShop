@@ -11,6 +11,7 @@ import time
 from sfmshop.api.health import health_router
 from sfmshop.api.v1 import v1_router
 from sfmshop.clients.llm import create_llm_client
+from sfmshop.clients.payment_client import create_payment_client
 from sfmshop.database.connection import create_mongo_client
 from sfmshop.repositories.event_repository import EventRepository
 from sfmshop.core.config import app_settings, uvicorn_options
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.cache = CacheService(app.state.redis)
     app.state.llm_client = create_llm_client(app_settings)
+    app.state.payment_client = create_payment_client(app_settings)
 
     app.state.mongo = create_mongo_client(app_settings.mongo_url)
     app.state.events = EventRepository(app.state.mongo[app_settings.mongo_db]["events"])
@@ -77,6 +79,8 @@ async def lifespan(app: FastAPI):
     await app.state.redis.close()
     if app.state.llm_client is not None:
         await app.state.llm_client.close()
+    if app.state.payment_client is not None:
+        await app.state.payment_client.close()
     await app.state.mongo.close()
     log_service.info("application_stopped")
 

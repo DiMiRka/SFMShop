@@ -197,6 +197,13 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
     llm_client = LLMClient()
     monkeypatch.setattr(main, "create_llm_client", lambda settings: llm_client)
 
+    class PaymentClient:
+        async def close(self):
+            self.closed = True
+
+    payment_client = PaymentClient()
+    monkeypatch.setattr(main, "create_payment_client", lambda settings: payment_client)
+
     class Collection:
         def __init__(self):
             self.indexes = []
@@ -225,12 +232,14 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
         assert isinstance(app.state.cache, main.CacheService)
         assert isinstance(app.state.consumer, Consumer)
         assert app.state.llm_client is llm_client
+        assert app.state.payment_client is payment_client
         assert app.state.consumer.events is app.state.events
         assert mongo.db_name == main.app_settings.mongo_db
         ttl_index = mongo.collection.indexes[0]
         assert ttl_index[1]["expireAfterSeconds"] == main.app_settings.event_log_ttl_days * 86400
 
     assert llm_client.closed
+    assert payment_client.closed
     assert mongo.closed
     assert app.state.consumer.closed
 

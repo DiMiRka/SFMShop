@@ -61,6 +61,11 @@ class AppSettings(BaseSettings):
     llm_max_tokens: int = 4096
     rate_limit_assistant: str = "10/minute"
 
+    payment_service_url: str | None = None
+    payment_timeout: float = 5.0
+    payment_connect_timeout: float = 2.0
+    payment_max_retries: int = 3
+
     @property
     def postgres_url(self) -> str:
         return (f"postgresql+asyncpg://{self.db_user}:{self.db_password}@"

@@ -33,6 +33,11 @@ ORDERS_CREATED = Counter(
     "sfmshop_orders_created_total",
     "Созданные заказы",
 )
+PAYMENT_REQUESTS = Counter(
+    "sfmshop_payment_requests_total",
+    "Запросы к сервису оплаты по исходу: success, failed (отказ), unavailable (после всех повторов)",
+    ["result"],
+)
 ASSISTANT_REQUESTS = Counter(
     "sfmshop_assistant_requests_total",
     "Запросы к ИИ-ассистенту по исходу",
