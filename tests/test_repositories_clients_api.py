@@ -4,18 +4,18 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from src.api.v1.auth import login, refresh_token, register
-from src.api.v1.orders import delete_order, get_order, get_orders, post_order
-from src.api.v1.products import delete_product, get_product, get_products, post_product, put_product
-from src.api.v1.users import delete_user, get_user, get_user_orders, get_users, put_user
-from src.clients.payment_client import PaymentClient
-from src.database.models import OrderItem as DbOrderItem
-from src.database.models import Product as DbProduct
-from src.database.models import User as DbUser
-from src.repositories.order_repository import OrderRepository
-from src.repositories.product_repository import ProductRepository
-from src.repositories.user_repository import UserRepository
-from src.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
+from sfmshop.api.v1.auth import login, refresh_token, register
+from sfmshop.api.v1.orders import delete_order, get_order, get_orders, post_order
+from sfmshop.api.v1.products import delete_product, get_product, get_products, post_product, put_product
+from sfmshop.api.v1.users import delete_user, get_user, get_user_orders, get_users, put_user
+from sfmshop.clients.payment_client import PaymentClient
+from sfmshop.database.models import OrderItem as DbOrderItem
+from sfmshop.database.models import Product as DbProduct
+from sfmshop.database.models import User as DbUser
+from sfmshop.repositories.order_repository import OrderRepository
+from sfmshop.repositories.product_repository import ProductRepository
+from sfmshop.repositories.user_repository import UserRepository
+from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 
 
 pytestmark = pytest.mark.anyio

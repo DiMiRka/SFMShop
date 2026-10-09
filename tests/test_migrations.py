@@ -3,8 +3,8 @@ import os
 import pytest
 from sqlalchemy import CheckConstraint, UniqueConstraint, create_engine, inspect
 
-from src.core.config import app_settings
-from src.database.models import Base
+from sfmshop.core.config import app_settings
+from sfmshop.database.models import Base
 
 
 pytestmark = pytest.mark.skipif(

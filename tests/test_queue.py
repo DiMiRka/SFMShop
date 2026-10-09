@@ -7,13 +7,13 @@ import pytest
 from aio_pika.exceptions import MessageProcessError
 from aio_pika.message import ProcessContext
 
-from src.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
-from src.services import queue_producer
-from src.services.order_service import OrderService
-from src.services.product_service import ProductService
-from src.services.queue_consumer import QueueConsumer
-from src.services.queue_producer import QueueProducer
-from src.services.user_service import UserService
+from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
+from sfmshop.services import queue_producer
+from sfmshop.services.order_service import OrderService
+from sfmshop.services.product_service import ProductService
+from sfmshop.services.queue_consumer import QueueConsumer
+from sfmshop.services.queue_producer import QueueProducer
+from sfmshop.services.user_service import UserService
 from tests.test_services import FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
 
 
@@ -315,7 +315,7 @@ async def test_consumer_keeps_reconnecting_with_backoff_until_rabbitmq_is_up(mon
     async def fake_sleep(delay):
         delays.append(delay)
 
-    monkeypatch.setattr("src.services.queue_consumer.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("sfmshop.services.queue_consumer.asyncio.sleep", fake_sleep)
     consumer = QueueConsumer(MagicMock(), "amqp://test", reconnect_base_delay=1, reconnect_max_delay=3)
     attempts = scripted_connect(consumer, [False, False, False, False, True])
 
@@ -358,7 +358,7 @@ async def test_failed_setup_closes_half_open_connection(monkeypatch):
     async def connect_robust(url):
         return connection
 
-    monkeypatch.setattr("src.services.queue_consumer.aio_pika.connect_robust", connect_robust)
+    monkeypatch.setattr("sfmshop.services.queue_consumer.aio_pika.connect_robust", connect_robust)
     consumer = QueueConsumer(MagicMock(), "amqp://test")
 
     assert await consumer._connect() is False
@@ -368,7 +368,7 @@ async def test_failed_setup_closes_half_open_connection(monkeypatch):
 
 
 async def test_disconnected_consumer_degrades_readiness():
-    from src.services.health_service import HealthService
+    from sfmshop.services.health_service import HealthService
 
     async def ok():
         return True

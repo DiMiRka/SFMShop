@@ -2,7 +2,7 @@
 
 Сервисы после изменения данных публикуют события в RabbitMQ, консьюмер обрабатывает их асинхронно\
 Сейчас события сбрасывают кэш в Redis, пишутся в журнал событий в MongoDB и запускают уведомление о новом заказе\
-Код: `src/services/queue_producer.py` и `src/services/queue_consumer.py`
+Код: `sfmshop/services/queue_producer.py` и `sfmshop/services/queue_consumer.py`
 
 ## Поток
 

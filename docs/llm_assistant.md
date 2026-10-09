@@ -6,13 +6,13 @@
 ## Устройство
 
 ```
-src/clients/llm/base.py            # Protocol LLMClient и нейтральные типы сообщений
-src/clients/llm/anthropic.py       # реализация на официальном SDK anthropic (AsyncAnthropic)
-src/clients/llm/__init__.py        # реестр провайдеров, выбор по LLM_PROVIDER
-src/services/assistant/tools.py    # реестр инструментов: имя → схема аргументов + обработчик
-src/services/assistant/service.py  # AssistantService: цикл tool use, лимиты, сборка ответа
-src/schemas/assistant.py           # запрос, ответ, схемы аргументов инструментов
-src/api/v1/assistant.py            # роутер, current_user, rate limit
+sfmshop/clients/llm/base.py            # Protocol LLMClient и нейтральные типы сообщений
+sfmshop/clients/llm/anthropic.py       # реализация на официальном SDK anthropic (AsyncAnthropic)
+sfmshop/clients/llm/__init__.py        # реестр провайдеров, выбор по LLM_PROVIDER
+sfmshop/services/assistant/tools.py    # реестр инструментов: имя → схема аргументов + обработчик
+sfmshop/services/assistant/service.py  # AssistantService: цикл tool use, лимиты, сборка ответа
+sfmshop/schemas/assistant.py           # запрос, ответ, схемы аргументов инструментов
+sfmshop/api/v1/assistant.py            # роутер, current_user, rate limit
 ```
 
 Клиент LLM создаётся один раз в lifespan, как Redis и очередь\

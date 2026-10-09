@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.main import sfmshop_app as app
-from src.core import dependencies
-from src.core.security import pwd_context
+from sfmshop.api.main import sfmshop_app as app
+from sfmshop.core import dependencies
+from sfmshop.core.security import pwd_context
 
 
 client = TestClient(app)
@@ -213,8 +213,8 @@ def request_with(headers):
 async def test_rate_limit_key_uses_verified_user_id_or_falls_back_to_ip():
     from jose import jwt
 
-    from src.core.limiter import user_or_ip
-    from src.core.security import create_access_token
+    from sfmshop.core.limiter import user_or_ip
+    from sfmshop.core.security import create_access_token
 
     token = await create_access_token({"sub": "42"})
     forged = jwt.encode({"sub": "42"}, "not-the-secret", algorithm="HS256")
@@ -230,7 +230,7 @@ def test_rate_limit_keeps_working_when_redis_is_down():
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
 
-    from src.core.limiter import create_limiter
+    from sfmshop.core.limiter import create_limiter
 
     limiter = create_limiter("redis://127.0.0.1:1/0")
     limited_app = FastAPI()
@@ -248,7 +248,7 @@ def test_rate_limit_keeps_working_when_redis_is_down():
 
 
 def test_app_limiter_uses_configured_storage():
-    from src.core.config import app_settings
-    from src.core.limiter import limiter
+    from sfmshop.core.config import app_settings
+    from sfmshop.core.limiter import limiter
 
     assert limiter._storage_uri == app_settings.rate_limit_storage_uri

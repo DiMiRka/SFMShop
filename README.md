@@ -66,11 +66,11 @@ flowchart LR
 ```
 
 Запрос проходит по слоям сверху вниз: роутер проверяет токен и валидирует вход, сервис применяет бизнес-правила и работает с кэшем,
-репозиторий выполняет запросы к БД. Зависимости собираются через `Depends` в `src/core/dependencies.py`,
+репозиторий выполняет запросы к БД. Зависимости собираются через `Depends` в `sfmshop/core/dependencies.py`,
 поэтому в тестах любой слой подменяется через `dependency_overrides`
 
 ```
-src/
+sfmshop/
 ├── api/           # приложение и lifespan, обработчики HTTP-ошибок, проверки здоровья
 ├── api/v1/        # роутеры (auth, products, reviews, users, orders, assistant, events)
 ├── services/      # бизнес логика, кэш, продюсер и консьюмер RabbitMQ, журнал событий, логирование, ИИ-ассистент
@@ -147,7 +147,7 @@ alembic upgrade head
 ```
 
 ```bash
-uvicorn src.api.main:sfmshop_app --reload
+uvicorn sfmshop.api.main:sfmshop_app --reload
 ```
 
 Для отладки можно выставить `DEBUG=True` в `.env`: при необработанной ошибке в ответе будет полный traceback \
@@ -322,7 +322,7 @@ pytest
 С отчётом о покрытии:
 
 ```bash
-pytest --cov=src --cov-report=term-missing
+pytest --cov=sfmshop --cov-report=term-missing
 ```
 
 Интеграционные тесты (`tests/integration`) запускают приложение целиком с настоящими PostgreSQL, Redis, RabbitMQ и MongoDB \
@@ -335,11 +335,11 @@ pytest --cov=src --cov-report=term-missing
 Линтер и проверка типов (то же, что в CI):
 
 ```bash
-ruff check src/ tests/
+ruff check sfmshop/ tests/
 ```
 
 ```bash
-mypy src/ --ignore-missing-imports
+mypy sfmshop/ --ignore-missing-imports
 ```
 
 ## CI/CD
@@ -353,7 +353,7 @@ mypy src/ --ignore-missing-imports
 
 ## Конфигурация
 
-Все настройки читаются из переменных окружения (`src/core/config.py`) \
+Все настройки читаются из переменных окружения (`sfmshop/core/config.py`) \
 Шаблон со всеми переменными лежит в [`.env.example`](.env.example) \
 Секреты в репозиторий не коммитятся
 

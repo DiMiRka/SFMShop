@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.core.exceptions import ForbiddenError
+from sfmshop.core.exceptions import ForbiddenError
 
 
 pytestmark = pytest.mark.anyio
@@ -67,7 +67,7 @@ class SequenceDb:
 
 
 async def test_dependency_factories_and_current_user(monkeypatch):
-    from src.core import dependencies as deps
+    from sfmshop.core import dependencies as deps
 
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(cache="cache", queue="queue")))
     assert deps.get_cache(request) == "cache"
@@ -107,7 +107,7 @@ async def async_value(value):
 
 
 async def test_database_connection_session_generators(monkeypatch):
-    from src.database import connection
+    from sfmshop.database import connection
 
     class Session:
         def __init__(self):
@@ -144,7 +144,7 @@ async def test_database_connection_session_generators(monkeypatch):
 
 
 async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
-    import src.api.main as main
+    import sfmshop.api.main as main
 
     class Redis:
         async def ping(self):
@@ -259,7 +259,7 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
 
 
 async def test_queue_producer_and_consumer_helpers(monkeypatch):
-    from src.services import queue_consumer, queue_producer
+    from sfmshop.services import queue_consumer, queue_producer
 
     class Exchange:
         def __init__(self):
@@ -322,7 +322,7 @@ async def test_queue_producer_and_consumer_helpers(monkeypatch):
 
 
 def test_setup_logging_is_idempotent(monkeypatch):
-    from src.services import log_service
+    from sfmshop.services import log_service
 
     calls = []
     monkeypatch.setattr(log_service.logger, "remove", lambda: calls.append("remove"))
@@ -338,7 +338,7 @@ def test_setup_logging_is_idempotent(monkeypatch):
 def test_logs_are_written_to_project_root_regardless_of_cwd(monkeypatch, tmp_path):
     from pathlib import Path
 
-    from src.services import log_service
+    from sfmshop.services import log_service
 
     sinks = []
     monkeypatch.chdir(tmp_path)

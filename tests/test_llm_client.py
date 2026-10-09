@@ -5,10 +5,10 @@ import httpx2
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from src.clients.llm import (AnthropicLLMClient, AssistantMessage, LLMResult, ToolCall, ToolResult,
+from sfmshop.clients.llm import (AnthropicLLMClient, AssistantMessage, LLMResult, ToolCall, ToolResult,
                              ToolResultsMessage, ToolSpec, UserMessage, create_llm_client)
-from src.core.config import AppSettings
-from src.core.exceptions import LLMUnavailableError
+from sfmshop.core.config import AppSettings
+from sfmshop.core.exceptions import LLMUnavailableError
 
 
 pytestmark = pytest.mark.anyio

@@ -6,9 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 from loguru import logger
 
-from src.api.main import sfmshop_app as app
-from src.core import dependencies
-from src.services.health_service import HealthService
+from sfmshop.api.main import sfmshop_app as app
+from sfmshop.core import dependencies
+from sfmshop.services.health_service import HealthService
 
 
 client = TestClient(app)

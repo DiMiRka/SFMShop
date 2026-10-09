@@ -8,18 +8,18 @@ from fastapi.testclient import TestClient
 from pymongo import DESCENDING
 from pymongo.errors import ServerSelectionTimeoutError
 
-from src.api.main import sfmshop_app as app
-from src.core import dependencies
-from src.core.exceptions import EventLogUnavailableError
-from src.repositories.event_repository import EventRepository
-from src.schemas import OrderCreate, OrderItemBase, ProductCreate, UserCreate
-from src.schemas.events import EventFilter
-from src.services import queue_consumer
-from src.services.event_log_service import EventLogService, build_event
-from src.services.health_service import HealthService
-from src.services.order_service import OrderService
-from src.services.product_service import ProductService
-from src.services.user_service import UserService
+from sfmshop.api.main import sfmshop_app as app
+from sfmshop.core import dependencies
+from sfmshop.core.exceptions import EventLogUnavailableError
+from sfmshop.repositories.event_repository import EventRepository
+from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, UserCreate
+from sfmshop.schemas.events import EventFilter
+from sfmshop.services import queue_consumer
+from sfmshop.services.event_log_service import EventLogService, build_event
+from sfmshop.services.health_service import HealthService
+from sfmshop.services.order_service import OrderService
+from sfmshop.services.product_service import ProductService
+from sfmshop.services.user_service import UserService
 from tests.test_queue import FakeMessage, build_consumer, build_producer
 from tests.test_services import FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
 

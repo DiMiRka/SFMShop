@@ -14,4 +14,4 @@ ENV PATH=/root/.local/bin:$PATH
 COPY --from=builder /root/.local /root/.local
 COPY . .
 
-CMD ["uvicorn", "src.api.main:sfmshop_app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "sfmshop.api.main:sfmshop_app", "--host", "0.0.0.0", "--port", "8000"]

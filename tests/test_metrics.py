@@ -7,14 +7,14 @@ import pytest
 from fastapi.testclient import TestClient
 from prometheus_client import REGISTRY
 
-from src.api.main import sfmshop_app as app
-from src.clients.llm import LLMResult, ToolCall
-from src.core import dependencies
-from src.core.metrics import start_metrics_server
-from src.core.exceptions import LLMUnavailableError
-from src.schemas import OrderCreate, OrderItemBase
-from src.services.cache_service import CacheService
-from src.services.order_service import OrderService
+from sfmshop.api.main import sfmshop_app as app
+from sfmshop.clients.llm import LLMResult, ToolCall
+from sfmshop.core import dependencies
+from sfmshop.core.metrics import start_metrics_server
+from sfmshop.core.exceptions import LLMUnavailableError
+from sfmshop.schemas import OrderCreate, OrderItemBase
+from sfmshop.services.cache_service import CacheService
+from sfmshop.services.order_service import OrderService
 from tests.test_assistant_service import ScriptedLLM, call, final, make_service
 from tests.test_queue import build_producer
 from tests.test_services import FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
@@ -176,7 +176,7 @@ def test_metrics_server_serves_metrics_on_separate_port():
 
 
 def test_busy_metrics_port_does_not_stop_the_app(monkeypatch, log_messages):
-    from src.core import metrics
+    from sfmshop.core import metrics
 
     def port_in_use(port):
         raise OSError("address already in use")
@@ -201,7 +201,7 @@ def test_alerts_and_dashboard_reference_only_exported_metrics(config):
 
     from prometheus_client import Counter, Histogram
 
-    from src.core import metrics
+    from sfmshop.core import metrics
 
     exported = set()
     for value in vars(metrics).values():
@@ -220,7 +220,7 @@ def test_alerts_and_dashboard_reference_only_exported_metrics(config):
 def test_exposition_has_no_created_timestamp_series():
     from prometheus_client import generate_latest
 
-    from src.core.metrics import HTTP_REQUESTS
+    from sfmshop.core.metrics import HTTP_REQUESTS
 
     HTTP_REQUESTS.labels("GET", "/v1/products/", "200").inc(0)
     body = generate_latest(REGISTRY).decode()

@@ -47,12 +47,12 @@ jobs:
       - name: Lint with ruff
         run: |
           pip install ruff==0.15.21
-          ruff check src/ tests/
+          ruff check sfmshop/ tests/
 
       - name: Type check with mypy
         run: |
           pip install mypy==2.3.0
-          mypy src/ --ignore-missing-imports
+          mypy sfmshop/ --ignore-missing-imports
 
       - name: Check migrations
         run: |
@@ -65,7 +65,7 @@ jobs:
         env:
           RUN_MIGRATION_TESTS: "1"
         run: |
-          pytest --cov=src --cov-report=xml
+          pytest --cov=sfmshop --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -95,7 +95,7 @@ jobs:
       - name: Smoke test image
         run: |
           docker run --rm --entrypoint pip sfmshop:ci check
-          docker run --rm --entrypoint python sfmshop:ci -c "import src.api.main"
+          docker run --rm --entrypoint python sfmshop:ci -c "import sfmshop.api.main"
 
   integration:
     runs-on: ubuntu-latest

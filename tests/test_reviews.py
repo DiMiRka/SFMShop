@@ -9,16 +9,16 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 
-from src.api.main import sfmshop_app as app
-from src.core import dependencies
-from src.database.models import Review
-from src.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError
-from src.repositories.order_repository import OrderRepository
-from src.repositories.product_repository import ProductRepository
-from src.repositories.review_repository import ReviewRepository
-from src.schemas.reviews import ReviewCreate, ReviewUpdate
-from src.services.product_service import ProductService
-from src.services.review_service import ReviewService
+from sfmshop.api.main import sfmshop_app as app
+from sfmshop.core import dependencies
+from sfmshop.database.models import Review
+from sfmshop.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError
+from sfmshop.repositories.order_repository import OrderRepository
+from sfmshop.repositories.product_repository import ProductRepository
+from sfmshop.repositories.review_repository import ReviewRepository
+from sfmshop.schemas.reviews import ReviewCreate, ReviewUpdate
+from sfmshop.services.product_service import ProductService
+from sfmshop.services.review_service import ReviewService
 from tests.test_queue import FakeMessage, build_consumer
 from tests.test_services import FakeCache, FakeDb, FakeQueue, OrderRepoFake, ProductRepoFake
 

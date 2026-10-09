@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from loguru import logger
 
-from src.api.main import sfmshop_app as app
-from src.core import dependencies
-from src.services.order_service import OrderService
+from sfmshop.api.main import sfmshop_app as app
+from sfmshop.core import dependencies
+from sfmshop.services.order_service import OrderService
 
 
 client = TestClient(app)
@@ -179,8 +179,8 @@ def test_foreign_order_is_not_visible_and_cannot_be_deleted():
 
 
 def test_product_card_is_served_from_database_when_redis_is_down():
-    from src.services.cache_service import CacheService
-    from src.services.product_service import ProductService
+    from sfmshop.services.cache_service import CacheService
+    from sfmshop.services.product_service import ProductService
     from tests.test_services import FakeQueue, ProductRepoFake
     from tests.test_unit_core import FlakyRedis
 
@@ -198,7 +198,7 @@ def test_product_card_is_served_from_database_when_redis_is_down():
 
 
 def test_register_returns_created_user_matching_response_schema():
-    from src.services.user_service import UserService
+    from sfmshop.services.user_service import UserService
     from tests.test_services import FakeCache, FakeQueue, OrderRepoFake, UserRepoFake
 
     service = UserService(UserRepoFake(), OrderRepoFake(), FakeCache(), FakeQueue())

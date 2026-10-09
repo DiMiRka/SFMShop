@@ -11,7 +11,7 @@
 
 | Хранилище | Данные | В проекте |
 | --- | --- | --- |
-| PostgreSQL | `users`, `products`, `orders`, `order_items`, `reviews` | есть, схема в `src/database/models.py`, миграции Alembic |
+| PostgreSQL | `users`, `products`, `orders`, `order_items`, `reviews` | есть, схема в `sfmshop/database/models.py`, миграции Alembic |
 | Redis | кэш каталога, пользователей и заказов | есть |
 | MongoDB | журнал событий `events`: создание, изменение и удаление товаров, пользователей и заказов | есть, пишет консьюмер `event_log_queue`, читает админ через `GET /v1/events/` |
 

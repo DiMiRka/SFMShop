@@ -4,23 +4,23 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from src.api.exceptions import (
+from sfmshop.api.exceptions import (
     base_exception_handler,
     business_exception_handler,
     unauthorized_handler,
     validation_exception_handler,
     validation_notfound_handler,
 )
-from src.core.config import app_settings
-from src.core.security import (
+from sfmshop.core.config import app_settings
+from sfmshop.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
     get_password_hash,
     verify_password,
 )
-from src.core.exceptions import BusinessLogicError, NotFoundError, UnauthorizedError, ValidationError
-from src.schemas import (
+from sfmshop.core.exceptions import BusinessLogicError, NotFoundError, UnauthorizedError, ValidationError
+from sfmshop.schemas import (
     OrderCreate,
     OrderItemBase,
     OrderItemsInDB,
@@ -35,8 +35,8 @@ from src.schemas import (
     UserResponse,
     UserUpdatePatch,
 )
-from src.schemas.orders import OrderItemResponse
-from src.services.cache_service import CacheService
+from sfmshop.schemas.orders import OrderItemResponse
+from sfmshop.services.cache_service import CacheService
 
 
 pytestmark = pytest.mark.anyio
@@ -183,7 +183,7 @@ async def test_api_exception_handlers():
 
 
 def test_any_email_accepted_by_schema_fits_db_column():
-    from src.database.models import User as DbUser
+    from sfmshop.database.models import User as DbUser
 
     local = "a" * 64
     domain = ".".join(["b" * 63, "c" * 63, "d" * 57]) + ".com"
@@ -198,7 +198,7 @@ def test_any_email_accepted_by_schema_fits_db_column():
 
 
 def test_any_product_name_accepted_by_schema_fits_db_column():
-    from src.database.models import Product as DbProduct
+    from sfmshop.database.models import Product as DbProduct
 
     longest = "x" * 200
     column_length = DbProduct.__table__.c.name.type.length
@@ -247,7 +247,7 @@ def test_user_patch_rejects_explicit_nulls_except_current_password():
 
 
 def test_product_response_accepts_existing_zero_price_and_stock():
-    from src.database.models import Product as DbProduct
+    from sfmshop.database.models import Product as DbProduct
 
     product = DbProduct(name="Old", price=Decimal("0.00"), quantity=0)
     product.id = 1

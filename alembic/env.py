@@ -5,8 +5,8 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from src.core.config import app_settings
-from src.database.models import Base
+from sfmshop.core.config import app_settings
+from sfmshop.database.models import Base
 
 config = context.config
 

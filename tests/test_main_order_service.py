@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.core.exceptions import ValidationError
-from src.schemas import OrderCreate, OrderItemBase
-from src.services.order_service import OrderService
+from sfmshop.core.exceptions import ValidationError
+from sfmshop.schemas import OrderCreate, OrderItemBase
+from sfmshop.services.order_service import OrderService
 
 
 pytestmark = pytest.mark.anyio

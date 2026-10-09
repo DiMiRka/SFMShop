@@ -11,10 +11,10 @@
 Запуск с отчётом о покрытии:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest --cov=src --cov-report=term-missing
+.\.venv\Scripts\python.exe -m pytest --cov=sfmshop --cov-report=term-missing
 ```
 
-Результат: 204 теста пройдены и 8 пропущены, общее покрытие `src` 98%\
+Результат: 204 теста пройдены и 8 пропущены, общее покрытие `sfmshop` 98%\
 Пропущены 2 теста схемы после миграций и 6 интеграционных: в CI первые идут в задаче `test` (`RUN_MIGRATION_TESTS=1`),
 вторые в отдельной задаче `integration` (`RUN_INTEGRATION_TESTS=1`) с PostgreSQL, Redis, RabbitMQ и MongoDB
 
@@ -133,16 +133,16 @@ order_rep.create.side_effect = RuntimeError("DB error")
 ## Покрытие кода
 
 Инструмент: `pytest-cov`\
-Общее покрытие `src`: 98%
+Общее покрытие `sfmshop`: 98%
 
-Полностью покрыты роутеры `src/api/v1`, проверки прав `src/core/permissions.py`, схемы, репозитории, 
+Полностью покрыты роутеры `sfmshop/api/v1`, проверки прав `sfmshop/core/permissions.py`, схемы, репозитории, 
 `product_service`, клиент LLM, `AssistantService` и инструменты ассистента \
 Сервисы заказов и пользователей покрыты на 98%
 
 Наименее покрытые модули:
 
-- `src/services/log_service.py`: 80%, не покрыты `critical` с отправкой алерта и настройка Sentry при заданном DSN
-- `src/database/connection.py`: 85%, не покрыт откат транзакции при ошибке
+- `sfmshop/services/log_service.py`: 80%, не покрыты `critical` с отправкой алерта и настройка Sentry при заданном DSN
+- `sfmshop/database/connection.py`: 85%, не покрыт откат транзакции при ошибке
 
 Объявление очередей и привязок в RabbitMQ проверяется на фейковом канале в `test_event_log.py`.
 Оставшееся (Sentry и транзакции), а также работу с настоящими RabbitMQ и MongoDB имеет смысл проверять

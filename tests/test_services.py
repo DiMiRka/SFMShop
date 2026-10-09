@@ -5,13 +5,13 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from src.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
-from src.database.models import Product as DbProduct, User as DbUser
-from src.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
-from src.core.security import get_password_hash, verify_password
-from src.services.order_service import OrderService
-from src.services.product_service import ProductService
-from src.services.user_service import UserService
+from sfmshop.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
+from sfmshop.database.models import Product as DbProduct, User as DbUser
+from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
+from sfmshop.core.security import get_password_hash, verify_password
+from sfmshop.services.order_service import OrderService
+from sfmshop.services.product_service import ProductService
+from sfmshop.services.user_service import UserService
 
 
 pytestmark = pytest.mark.anyio

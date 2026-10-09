@@ -15,10 +15,10 @@ import redis.asyncio as aioredis
 from redis.exceptions import RedisError
 from sqlalchemy import select
 
-from src.core.config import app_settings
-from src.database.connection import async_session, engine
-from src.database.models import User
-from src.services.cache_service import CacheService
+from sfmshop.core.config import app_settings
+from sfmshop.database.connection import async_session, engine
+from sfmshop.database.models import User
+from sfmshop.services.cache_service import CacheService
 
 
 async def set_admin(email: str, is_admin: bool) -> int:

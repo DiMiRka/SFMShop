@@ -4,12 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.clients.llm import AssistantMessage, LLMResult, ToolCall, ToolResultsMessage, UserMessage
-from src.schemas.assistant import AssistantResponse
-from src.services.assistant.service import (INVALID_RESPONSE_ANSWER, REFUSAL_ANSWER, STEPS_EXCEEDED_ANSWER,
+from sfmshop.clients.llm import AssistantMessage, LLMResult, ToolCall, ToolResultsMessage, UserMessage
+from sfmshop.schemas.assistant import AssistantResponse
+from sfmshop.services.assistant.service import (INVALID_RESPONSE_ANSWER, REFUSAL_ANSWER, STEPS_EXCEEDED_ANSWER,
                                             SYSTEM_PROMPT, AssistantService)
-from src.services.order_service import OrderService
-from src.services.product_service import ProductService
+from sfmshop.services.order_service import OrderService
+from sfmshop.services.product_service import ProductService
 from tests.test_services import (FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake,
                                  db_product)
 

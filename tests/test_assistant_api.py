@@ -6,12 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 from limits import parse
 
-from src.api.main import sfmshop_app as app
-from src.clients.llm import LLMResult
-from src.core import dependencies
-from src.core.config import app_settings
-from src.core.limiter import limiter
-from src.core.exceptions import LLMUnavailableError
+from sfmshop.api.main import sfmshop_app as app
+from sfmshop.clients.llm import LLMResult
+from sfmshop.core import dependencies
+from sfmshop.core.config import app_settings
+from sfmshop.core.limiter import limiter
+from sfmshop.core.exceptions import LLMUnavailableError
 
 
 client = TestClient(app)
@@ -114,7 +114,7 @@ def test_assistant_is_rate_limited():
 
 
 async def token_for(user_id):
-    from src.core.security import create_access_token
+    from sfmshop.core.security import create_access_token
 
     return await create_access_token({"sub": str(user_id)})
 

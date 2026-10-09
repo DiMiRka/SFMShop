@@ -7,9 +7,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
-from src.api.main import sfmshop_app as app
-from src.core.config import app_settings
-from src.core.limiter import limiter
+from sfmshop.api.main import sfmshop_app as app
+from sfmshop.core.config import app_settings
+from sfmshop.core.limiter import limiter
 
 
 pytestmark = pytest.mark.skipif(
@@ -162,8 +162,8 @@ def test_only_buyer_can_review_and_rating_appears_in_card(client, admin, buyer):
 
 
 def test_product_search_escapes_wildcards_on_real_postgres(client, admin):
-    from src.database.connection import async_session
-    from src.repositories.product_repository import ProductRepository
+    from sfmshop.database.connection import async_session
+    from sfmshop.repositories.product_repository import ProductRepository
 
     marker = uuid.uuid4().hex[:8]
     literal_id = create_product(client, admin, name=f"100%_wool {marker}", price="50.00")
