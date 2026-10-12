@@ -11,8 +11,9 @@ import time
 from sfmshop.api.health import health_router
 from sfmshop.api.v1 import v1_router
 from sfmshop.clients.llm import create_llm_client
+from sfmshop.clients.email_client import create_email_client
 from sfmshop.clients.payment_client import create_payment_client
-from sfmshop.database.connection import create_mongo_client
+from sfmshop.database.connection import async_session, create_mongo_client
 from sfmshop.repositories.event_repository import EventRepository
 from sfmshop.core.config import app_settings, uvicorn_options
 from sfmshop.core.metrics import HTTP_DURATION, HTTP_REQUESTS, route_label, start_metrics_server
@@ -21,6 +22,7 @@ from sfmshop.services.cache_service import CacheService
 from sfmshop.services.log_service import configure_sentry, log_service, setup_logging
 from sfmshop.services.queue_producer import QueueProducer
 from sfmshop.services.queue_consumer import QueueConsumer
+from sfmshop.services.notification_service import OrderNotifier
 from sfmshop.api.exceptions import (validation_notfound_handler, validation_exception_handler,
                                 business_exception_handler, unauthorized_handler, forbidden_handler,
                                 service_unavailable_handler, base_exception_handler)
@@ -64,6 +66,7 @@ async def lifespan(app: FastAPI):
         cache=app.state.cache,
         url=app_settings.rabbitmq_url,
         events=app.state.events,
+        notifier=OrderNotifier(async_session, app.state.cache, create_email_client(app_settings)),
     )
     await consumer.start()
 

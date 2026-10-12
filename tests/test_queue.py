@@ -132,16 +132,29 @@ async def test_broken_message_is_retried_then_moved_to_error_queue(method, queue
     assert error_exchange.publish.await_args.kwargs["routing_key"] == f"{queue_name}.error"
 
 
-async def test_notification_uses_order_id_from_order_created_event(log_messages):
+async def test_notification_takes_order_id_from_order_paid_event():
     queue = FakeQueue()
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
-    await OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), queue).create_order(1, order)
+    await OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), queue,
+                       FakePayments()).create_order(1, order)
     consumer, _ = build_consumer()
+    consumer.notifier = SimpleNamespace(order_paid=AsyncMock())
     _, routing_key, payload = queue.events[-1]
 
-    await consumer.process_notification(FakeMessage(routing_key, payload))
+    message = FakeMessage(routing_key, payload)
+    await consumer.process_notification(message)
 
-    assert "Отправка email для заказа 77" in log_messages
+    assert routing_key == "order.paid"
+    consumer.notifier.order_paid.assert_awaited_once_with(77)
+    message.ack.assert_awaited_once()
+
+
+async def test_notification_without_notifier_is_only_logged(log_messages):
+    consumer, _ = build_consumer()
+
+    await consumer.process_notification(FakeMessage("order.paid", {"order_ids": 5}))
+
+    assert "Order id=5 paid, notifier is not configured" in log_messages
 
 
 def build_producer(monkeypatch, publish_side_effect):

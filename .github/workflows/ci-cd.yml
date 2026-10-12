@@ -191,6 +191,10 @@ jobs:
       PAYMENT_DB_USER: postgres
       PAYMENT_DB_PASSWORD: postgres
       PAYMENT_DB_NAME: payment_db
+      SMTP_HOST: localhost
+      SMTP_PORT: 1025
+      SMTP_START_TLS: "false"
+      MAILPIT_URL: http://localhost:8025
 
     services:
       postgres:
@@ -223,6 +227,11 @@ jobs:
           --health-interval 5s
           --health-timeout 10s
           --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports:
+          - 1025:1025
+          - 8025:8025
       mongo:
         image: mongo:7
         ports:

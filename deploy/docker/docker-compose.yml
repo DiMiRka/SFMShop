@@ -37,6 +37,12 @@ services:
 
         PAYMENT_SERVICE_URL: http://payment:8001
         PAYMENT_SERVICE_TOKEN: ${PAYMENT_SERVICE_TOKEN:?set PAYMENT_SERVICE_TOKEN in .env}
+
+        SMTP_HOST: ${SMTP_HOST:-mailpit}
+        SMTP_PORT: ${SMTP_PORT:-1025}
+        SMTP_START_TLS: ${SMTP_START_TLS:-false}
+        SMTP_USERNAME: ${SMTP_USERNAME:-}
+        SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -69,6 +75,11 @@ services:
     depends_on:
       payment-db:
         condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    ports:
+      - "8025:8025"
 
   payment-db:
     image: postgres:17

@@ -25,6 +25,14 @@ class OrderRepository(BaseRepository):
         result = await self.db.execute(select(Order).options(selectinload(Order.items)).where(Order.id == order_id))
         return result.scalar_one_or_none()
 
+    async def get_with_products_and_user(self, order_id: int) -> Order | None:
+        result = await self.db.execute(
+            select(Order)
+            .options(selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.user))
+            .where(Order.id == order_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_by_id_for_update(self, order_id: int) -> Order | None:
         result = await self.db.execute(
             select(Order).

@@ -67,6 +67,14 @@ class AppSettings(BaseSettings):
     payment_connect_timeout: float = 2.0
     payment_max_retries: int = 3
 
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_start_tls: bool = True
+    smtp_timeout: float = 10.0
+    smtp_from: str = "SFMShop <noreply@sfmshop.local>"
+
     @property
     def postgres_url(self) -> str:
         return (f"postgresql+asyncpg://{self.db_user}:{self.db_password}@"

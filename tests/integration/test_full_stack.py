@@ -3,6 +3,7 @@ import time
 import uuid
 from decimal import Decimal
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -18,6 +19,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 PASSWORD = "abc12345"
+MAILPIT_URL = os.getenv("MAILPIT_URL", "http://localhost:8025")
 
 
 @pytest.fixture(scope="module")
@@ -154,6 +156,13 @@ def test_order_charges_balance_reduces_stock_and_lands_in_event_log(client, admi
 
     [event] = eventually(logged)
     assert event["user_ids"] == [user["id"]] and event["product_ids"] == [product_id]
+
+    def delivered():
+        messages = httpx.get(f"{MAILPIT_URL}/api/v1/messages", params={"limit": 50}).json()["messages"]
+        return [m for m in messages if m["Subject"] == f"Заказ №{order_id} оплачен"]
+
+    [mail] = eventually(delivered)
+    assert [recipient["Address"] for recipient in mail["To"]] == [user["email"]]
 
 
 def test_unpaid_order_fails_then_cancel_returns_stock(client, admin):

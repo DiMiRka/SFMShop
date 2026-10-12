@@ -7,6 +7,7 @@ from loguru import logger
 from sfmshop.repositories.event_repository import EventRepository
 from sfmshop.services.cache_service import CacheService
 from sfmshop.services.event_log_service import build_event
+from sfmshop.services.notification_service import OrderNotifier
 
 
 ALL_EVENTS = (
@@ -34,10 +35,12 @@ class QueueConsumer:
             url: str,
             events: EventRepository | None = None,
             reconnect_base_delay: float = 1.0,
-            reconnect_max_delay: float = 30.0):
+            reconnect_max_delay: float = 30.0,
+            notifier: OrderNotifier | None = None):
         self.url = url
         self.cache = cache
         self.events = events
+        self.notifier = notifier
         self.max_retries = 3
         self.reconnect_base_delay = reconnect_base_delay
         self.reconnect_max_delay = reconnect_max_delay
@@ -227,7 +230,11 @@ class QueueConsumer:
         async with message.process(requeue=False, ignore_processed=True):
             try:
                 data = json.loads(message.body)
-                logger.info(f"Отправка email для заказа {data.get('order_ids')}")
+                order_id = data["order_ids"]
+                if self.notifier is None:
+                    logger.info(f"Order id={order_id} paid, notifier is not configured")
+                else:
+                    await self.notifier.order_paid(order_id)
             except Exception:
                 await self._retry_or_park(message, "notification_queue")
 

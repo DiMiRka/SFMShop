@@ -26,6 +26,7 @@ REST API интернет-магазина \
 - мониторинг: метрики Prometheus на отдельном порту 9100, дашборд Grafana, алерты с уведомлениями в Telegram через Alertmanager
 - единый формат ошибок через доменные исключения и exception handlers
 - ИИ-ассистент магазина на Claude API (tool calling, structured output, права проверяет сервер, а не модель)
+- письмо покупателю об оплаченном заказе через SMTP (aiosmtplib) из консьюмера RabbitMQ, без дублей при повторной доставке, локально письма видны в Mailpit
 - отдельный микросервис оплаты `payment_service/` со своей базой (кошельки, журнал операций, идемпотентные оплаты и возвраты)
 
 ## Стек
@@ -42,6 +43,7 @@ REST API интернет-магазина \
 | Инфраструктура | Docker, Docker Compose, Kubernetes, GitHub Actions     |
 | Качество       | pytest, pytest-cov, ruff, mypy, Codecov                |
 | Мониторинг     | Prometheus (prometheus_client), Grafana, Alertmanager, Sentry |
+| Почта          | SMTP (aiosmtplib), Mailpit для локальной разработки   |
 
 ## Архитектура
 
@@ -119,6 +121,8 @@ docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app alem
 - Grafana с дашбордом «Состояние сервиса»: http://localhost:3001 (просмотр без входа; для правки вход `admin` / `GRAFANA_ADMIN_PASSWORD`, по умолчанию `admin`)\
   Дашборд хранится в `deploy/grafana/dashboards/sfmshop-service.json` (после правки файла выполните `docker compose ... restart grafana`)
 - Alertmanager: http://localhost:9093 (сработавшие алерты, уведомления в Telegram)
+- Mailpit: http://localhost:8025 (письма покупателям об оплаченных заказах, наружу ничего не уходит)\
+  Чтобы отправлять настоящие письма, задайте в `.env` `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_START_TLS=true` и `SMTP_FROM`
 
 **Уведомления в Telegram**\
 Без настройки алерты видны только в интерфейсе Alertmanager, чтобы получать их в Telegram:

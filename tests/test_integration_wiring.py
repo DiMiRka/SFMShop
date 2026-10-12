@@ -179,10 +179,11 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
             return Queue()
 
     class Consumer:
-        def __init__(self, cache, url, events=None):
+        def __init__(self, cache, url, events=None, notifier=None):
             self.cache = cache
             self.url = url
             self.events = events
+            self.notifier = notifier
 
         async def start(self):
             self.started = True
@@ -241,6 +242,8 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
         assert app.state.llm_client is llm_client
         assert app.state.payment_client is payment_client
         assert app.state.consumer.events is app.state.events
+        assert isinstance(app.state.consumer.notifier, main.OrderNotifier)
+        assert app.state.consumer.notifier.cache is app.state.cache
         assert mongo.db_name == main.app_settings.mongo_db
         ttl_index = mongo.collection.indexes[0]
         assert ttl_index[1]["expireAfterSeconds"] == main.app_settings.event_log_ttl_days * 86400
