@@ -17,8 +17,8 @@
 Результат: 268 тестов пройдены и 10 пропущены, общее покрытие `sfmshop` 98%\
 Пропущены 2 теста схемы после миграций и 8 интеграционных: в CI первые идут в задаче `test` (`RUN_MIGRATION_TESTS=1`),
 вторые в отдельной задаче `integration` (`RUN_INTEGRATION_TESTS=1`) с PostgreSQL, Redis, RabbitMQ, MongoDB и запущенным payment-service\
-Тесты самого payment-service лежат в `payment_service/tests` и идут на настоящем PostgreSQL,
-см. [microservice_architecture.md](../docs/microservice_architecture.md)
+Тесты самого payment-service лежат в `payment_service/tests` и идут на настоящем PostgreSQL\
+Правила алертов Prometheus покрыты юнит-тестами `deploy/prometheus/alerts_test.yml` (`promtool test rules`), в CI это шаг задачи `test`
 
 ## Принципы
 

@@ -54,6 +54,11 @@ jobs:
           pip install mypy==2.3.0
           mypy sfmshop/ --ignore-missing-imports
 
+      - name: Check alert rules
+        run: |
+          docker run --rm -v "$PWD/deploy/prometheus:/cfg:ro" -w /cfg --entrypoint promtool prom/prometheus:v3.5.0 check config prometheus.yml
+          docker run --rm -v "$PWD/deploy/prometheus:/cfg:ro" -w /cfg --entrypoint promtool prom/prometheus:v3.5.0 test rules alerts_test.yml
+
       - name: Check migrations
         run: |
           alembic upgrade head

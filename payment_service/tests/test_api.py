@@ -149,6 +149,9 @@ async def test_lifespan_warns_about_empty_token_and_disposes_engine(monkeypatch)
     messages = []
     monkeypatch.setattr(main, "engine", engine)
     monkeypatch.setattr(main.settings, "service_token", "")
+    monkeypatch.setattr(main.settings, "metrics_port", 9101)
+    metrics_ports = []
+    monkeypatch.setattr(main, "start_metrics_server", metrics_ports.append)
     handler = logger.add(lambda message: messages.append(message.record["message"]))
     try:
         async with main.lifespan(main.app):
@@ -157,4 +160,5 @@ async def test_lifespan_warns_about_empty_token_and_disposes_engine(monkeypatch)
         logger.remove(handler)
 
     assert engine.disposed
+    assert metrics_ports == [9101]
     assert any("PAYMENT_SERVICE_TOKEN" in message for message in messages)

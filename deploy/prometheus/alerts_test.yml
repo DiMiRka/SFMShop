@@ -1,0 +1,141 @@
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: payment-service лежит
+    interval: 1m
+    input_series:
+      - series: 'up{job="payment-service"}'
+        values: "0x5"
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: PaymentServiceDown
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: PaymentServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: payment-service
+            exp_annotations:
+              summary: "payment-service не отвечает: Prometheus не может забрать метрики"
+
+  - name: payment-service работает
+    interval: 1m
+    input_series:
+      - series: 'up{job="payment-service"}'
+        values: "1x5"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PaymentServiceDown
+        exp_alerts: []
+
+  - name: основной сервис не достучался до оплаты
+    interval: 1m
+    input_series:
+      - series: 'sfmshop_payment_requests_total{result="unavailable"}'
+        values: "0 0 0 1 1 1"
+      - series: 'sfmshop_payment_requests_total{result="success"}'
+        values: "0+5x5"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PaymentsUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: PaymentsUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Основной сервис не достучался до payment-service: заказы остаются в pending"
+
+  - name: ошибки 5xx в payment-service
+    interval: 1m
+    input_series:
+      - series: 'payment_service_http_requests_total{method="POST", route="/api/v1/payments", status="500"}'
+        values: "0+10x15"
+      - series: 'payment_service_http_requests_total{method="POST", route="/api/v1/payments", status="201"}'
+        values: "0+100x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: PaymentServiceErrors
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Больше 5% ответов payment-service с ошибкой 5xx"
+
+  - name: редкие ошибки 5xx не поднимают тревогу
+    interval: 1m
+    input_series:
+      - series: 'payment_service_http_requests_total{method="POST", route="/api/v1/payments", status="500"}'
+        values: "0+1x15"
+      - series: 'payment_service_http_requests_total{method="POST", route="/api/v1/payments", status="201"}'
+        values: "0+100x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: PaymentServiceErrors
+        exp_alerts: []
+
+  - name: массовые отказы в оплате
+    interval: 1m
+    input_series:
+      - series: 'payment_service_charges_total{result="failed"}'
+        values: "0+2x20"
+      - series: 'payment_service_charges_total{result="success"}'
+        values: "0+1x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: PaymentDeclinesSpike
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Больше половины оплат отклонено: возможна ошибка в списаниях или пополнениях"
+
+  - name: отказы при малом числе оплат не считаются всплеском
+    interval: 1m
+    input_series:
+      - series: 'payment_service_charges_total{result="failed"}'
+        values: "0+0.4x20"
+      - series: 'payment_service_charges_total{result="success"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: PaymentDeclinesSpike
+        exp_alerts: []
+
+  - name: письма не уходят
+    interval: 1m
+    input_series:
+      - series: 'sfmshop_emails_total{result="failed"}'
+        values: "0 0 1 1"
+      - series: 'sfmshop_emails_total{result="sent"}'
+        values: "0+3x3"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: EmailsFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "SMTP отказывает: письма об оплате копятся в retry и error очередях"
+      - eval_time: 3m
+        alertname: EmailsDisabled
+        exp_alerts: []
+
+  - name: SMTP не настроен
+    interval: 1m
+    input_series:
+      - series: 'sfmshop_emails_total{result="disabled"}'
+        values: "0 1 2"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: EmailsDisabled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "SMTP не настроен: покупатели не получают писем об оплате"

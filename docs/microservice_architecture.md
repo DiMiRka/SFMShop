@@ -187,6 +187,40 @@ PAYMENT_SERVICE_TOKEN=тот же секрет, что у payment-service
 - асинхронный вариант: Order Service публикует `order.created`, payment-service забирает событие из RabbitMQ.\
   Так основной сервис не ждёт ответа, но клиенту нужно узнавать статус оплаты отдельно
 
+## Метрики и алерты
+
+payment-service отдаёт метрики на отдельном порту 9101 (`PAYMENT_METRICS_PORT`), Prometheus забирает их как job `payment-service`:
+
+| Метрика | Что считает |
+| --- | --- |
+| `payment_service_http_requests_total` и `payment_service_http_request_duration_seconds` | запросы и время ответа по шаблону маршрута, без проб `/health` |
+| `payment_service_charges_total{result}` | списания: `success`, `failed`, `replay` (повтор ключа или заказ уже оплачен) |
+| `payment_service_charged_amount_total` | сумма успешных списаний в рублях |
+| `payment_service_refunds_total{result}` | возвраты: `refunded`, `already_refunded` |
+| `payment_service_top_ups_total{result}` | пополнения: `credited`, `replay` |
+
+Счётчики увеличиваются только после коммита транзакции (откатившаяся операция не попадает в метрики)\
+Рост `replay` значит, что основной сервис часто ловит таймауты и повторяет запросы
+
+Ряд «Оплата и письма» на дашборде Grafana: доступность payment-service, доля успешных оплат, оборот за период,
+отправленные письма, оплаты глазами основного сервиса и самого payment-service, p95 ответа по маршрутам
+
+| Алерт | Условие | Важность |
+| --- | --- | --- |
+| `PaymentServiceDown` | Prometheus не забирает метрики payment-service 1 минуту | critical |
+| `PaymentsUnavailable` | основной сервис получил `unavailable` за 10 минут | critical |
+| `PaymentServiceErrors` | больше 5% ответов 5xx за 5 минут | critical |
+| `PaymentDeclinesSpike` | больше половины оплат отклонено за 15 минут при 10 и более оплатах | warning |
+| `EmailsFailing` | ошибка SMTP за 15 минут | warning |
+| `EmailsDisabled` | письма не отправляются, потому что SMTP не настроен | warning |
+
+Правила проверяются юнит-тестами `deploy/prometheus/alerts_test.yml` (на выдуманных рядах метрик проверяется,
+что алерт срабатывает, когда должен, и молчит, когда не должен)
+
+```bash
+docker run --rm -v "$PWD/deploy/prometheus:/cfg:ro" -w /cfg --entrypoint promtool prom/prometheus:v3.5.0 test rules alerts_test.yml
+```
+
 ## Тесты
 
 Тесты payment-service идут на настоящем PostgreSQL: блокировки, частичный индекс и `CHECK` на фейках не проверить\

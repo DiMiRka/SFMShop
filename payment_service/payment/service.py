@@ -3,6 +3,7 @@ from decimal import Decimal
 from loguru import logger
 
 from payment.core.exceptions import ConflictError, IdempotencyKeyReusedError, NotFoundError
+from payment.core.metrics import CHARGED_AMOUNT, CHARGES, REFUNDS, TOP_UPS
 from payment.database.models import Payment, PaymentStatus, TransactionKind, Wallet, WalletTransaction
 from payment.repository import PaymentRepository
 from payment.schemas import ChargeRequest
@@ -13,6 +14,28 @@ class PaymentService:
         self.repo = repo
 
     async def charge(self, idempotency_key: str, request: ChargeRequest) -> tuple[Payment, bool]:
+        payment, created = await self._charge(idempotency_key, request)
+
+        if not created:
+            CHARGES.labels("replay").inc()
+        else:
+            CHARGES.labels(payment.status).inc()
+            if payment.status == PaymentStatus.SUCCESS:
+                CHARGED_AMOUNT.inc(float(payment.amount))
+
+        return payment, created
+
+    async def refund(self, payment_id: int) -> Payment:
+        payment, refunded = await self._refund(payment_id)
+        REFUNDS.labels("refunded" if refunded else "already_refunded").inc()
+        return payment
+
+    async def top_up(self, idempotency_key: str, user_id: int, amount: Decimal) -> Wallet:
+        wallet, credited = await self._top_up(idempotency_key, user_id, amount)
+        TOP_UPS.labels("credited" if credited else "replay").inc()
+        return wallet
+
+    async def _charge(self, idempotency_key: str, request: ChargeRequest) -> tuple[Payment, bool]:
         async with self.repo.db.begin():
             wallet = await self.repo.lock_wallet(request.user_id)
 
@@ -48,7 +71,7 @@ class PaymentService:
 
         return payment, True
 
-    async def refund(self, payment_id: int) -> Payment:
+    async def _refund(self, payment_id: int) -> tuple[Payment, bool]:
         async with self.repo.db.begin():
             found = await self.repo.get_payment(payment_id)
             if found is None:
@@ -60,7 +83,7 @@ class PaymentService:
                 raise NotFoundError("Платёж не найден")
 
             if payment.status == PaymentStatus.REFUNDED:
-                return payment
+                return payment, False
             if payment.status != PaymentStatus.SUCCESS:
                 raise ConflictError("Вернуть можно только успешный платёж")
 
@@ -70,9 +93,9 @@ class PaymentService:
                 user_id=wallet.user_id, amount=payment.amount, kind=TransactionKind.REFUND, payment_id=payment.id,
             ))
 
-        return payment
+        return payment, True
 
-    async def top_up(self, idempotency_key: str, user_id: int, amount: Decimal) -> Wallet:
+    async def _top_up(self, idempotency_key: str, user_id: int, amount: Decimal) -> tuple[Wallet, bool]:
         async with self.repo.db.begin():
             wallet = await self.repo.lock_wallet(user_id)
 
@@ -80,14 +103,14 @@ class PaymentService:
             if replay is not None:
                 if (replay.user_id, replay.amount, replay.kind) != (user_id, amount, TransactionKind.TOP_UP):
                     raise IdempotencyKeyReusedError("Ключ идемпотентности уже использован с другими параметрами")
-                return wallet
+                return wallet, False
 
             wallet.balance += amount
             await self.repo.add(WalletTransaction(
                 user_id=user_id, amount=amount, kind=TransactionKind.TOP_UP, idempotency_key=idempotency_key,
             ))
 
-        return wallet
+        return wallet, True
 
     async def get_payment(self, payment_id: int) -> Payment:
         payment = await self.repo.get_payment(payment_id)

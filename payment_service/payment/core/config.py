@@ -9,6 +9,7 @@ class PaymentSettings(BaseSettings):
     db_password: str = "password"
 
     service_token: str = ""
+    metrics_port: int | None = 9101
 
     model_config = SettingsConfigDict(env_prefix="PAYMENT_", env_file=".env", extra="ignore")
 

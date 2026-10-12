@@ -49,3 +49,54 @@ groups:
           severity: warning
         annotations:
           summary: "ИИ-ассистент отвечает 503: провайдер LLM недоступен"
+
+  - name: payments-and-emails
+    rules:
+      - alert: PaymentServiceDown
+        expr: up{job="payment-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "payment-service не отвечает: Prometheus не может забрать метрики"
+
+      - alert: PaymentsUnavailable
+        expr: sum(increase(sfmshop_payment_requests_total{result="unavailable"}[10m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Основной сервис не достучался до payment-service: заказы остаются в pending"
+
+      - alert: PaymentServiceErrors
+        expr: |
+          sum(rate(payment_service_http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(payment_service_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Больше 5% ответов payment-service с ошибкой 5xx"
+
+      - alert: PaymentDeclinesSpike
+        expr: |
+          sum(increase(payment_service_charges_total{result="failed"}[15m]))
+            / sum(increase(payment_service_charges_total{result=~"success|failed"}[15m])) > 0.5
+          and sum(increase(payment_service_charges_total{result=~"success|failed"}[15m])) >= 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "Больше половины оплат отклонено: возможна ошибка в списаниях или пополнениях"
+
+      - alert: EmailsFailing
+        expr: sum(increase(sfmshop_emails_total{result="failed"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "SMTP отказывает: письма об оплате копятся в retry и error очередях"
+
+      - alert: EmailsDisabled
+        expr: sum(increase(sfmshop_emails_total{result="disabled"}[1h])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "SMTP не настроен: покупатели не получают писем об оплате"

@@ -24,6 +24,8 @@ REST API интернет-магазина \
 - rate limiting на вход и на ИИ-ассистента (slowapi, счётчики в Redis), структурированные логи, Sentry подключается при наличии `sentry-sdk` и `SENTRY_DSN`
 - проверки здоровья `/health/live` и `/health/ready` для проб Kubernetes
 - мониторинг: метрики Prometheus на отдельном порту 9100, дашборд Grafana, алерты с уведомлениями в Telegram через Alertmanager
+- мониторинг оплаты и почты (метрики payment-service на порту 9101, ряд «Оплата и письма» в Grafana,
+  алерты на недоступность сервиса оплаты, 5xx, всплеск отказов и сбои SMTP, правила алертов покрыты тестами `promtool`)
 - единый формат ошибок через доменные исключения и exception handlers
 - ИИ-ассистент магазина на Claude API (tool calling, structured output, права проверяет сервер, а не модель)
 - письмо покупателю об оплаченном заказе через SMTP (aiosmtplib) из консьюмера RabbitMQ, без дублей при повторной доставке, локально письма видны в Mailpit
@@ -386,7 +388,7 @@ mypy sfmshop/ --ignore-missing-imports
 
 Пайплайн `.github/workflows/ci-cd.yml` запускается на push и pull request:
 
-1. **test**: ruff → mypy → миграции на PostgreSQL (`upgrade head`, `alembic check`, `downgrade base`, снова `upgrade head`) → pytest с покрытием и проверкой схемы после миграций → загрузка отчёта в Codecov
+1. **test**: ruff → mypy → проверка конфига Prometheus и юнит-тесты алертов (`promtool test rules`) → миграции на PostgreSQL (`upgrade head`, `alembic check`, `downgrade base`, снова `upgrade head`) → pytest с покрытием и проверкой схемы после миграций → загрузка отчёта в Codecov
 2. **build** (параллельно с test, на каждый push и pull request): сборка Docker-образов основного сервиса и payment-service → `pip check` и импорт приложения внутри каждого образа. Слои сохраняются в кэш GitHub Actions
 3. **payment-service** (параллельно): ruff, mypy и тесты `payment_service/` на настоящем PostgreSQL (блокировки, частичный индекс, миграции)
 4. **integration** (параллельно): PostgreSQL, Redis, RabbitMQ и MongoDB в сервис-контейнерах → миграции обоих сервисов → запуск payment-service → интеграционные тесты `tests/integration`, приложение стартует целиком через lifespan

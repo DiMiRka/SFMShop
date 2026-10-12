@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("PAYMENT_DB_NAME", "payment_test")
 os.environ["PAYMENT_SERVICE_TOKEN"] = "test-token"
+os.environ["PAYMENT_METRICS_PORT"] = "0"
 
 from contextlib import asynccontextmanager  # noqa: E402
 from pathlib import Path  # noqa: E402

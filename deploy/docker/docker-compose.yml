@@ -147,6 +147,7 @@ services:
       - ../prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     depends_on:
       - app
+      - payment
       - alertmanager
 
   alertmanager:
