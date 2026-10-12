@@ -218,7 +218,7 @@ payment-service отдаёт метрики на отдельном порту 9
 что алерт срабатывает, когда должен, и молчит, когда не должен)
 
 ```bash
-docker run --rm -v "$PWD/deploy/prometheus:/cfg:ro" -w /cfg --entrypoint promtool prom/prometheus:v3.5.0 test rules alerts_test.yml
+docker run --rm -v "$PWD/deploy/prometheus:/etc/prometheus:ro" -w /etc/prometheus --entrypoint promtool prom/prometheus:v3.5.0 test rules alerts_test.yml
 ```
 
 ## Тесты
