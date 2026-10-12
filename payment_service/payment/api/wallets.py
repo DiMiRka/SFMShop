@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 
-from payment_service.payment.api.dependencies import payment_service
-from payment_service.payment.core.security import require_service_token
-from payment_service.payment.schemas import IdempotencyKey, TopUpRequest, WalletResponse
+from payment.api.dependencies import payment_service
+from payment.core.security import require_service_token
+from payment.schemas import IdempotencyKey, TopUpRequest, WalletResponse
 
 wallets_router = APIRouter(prefix="/wallets", tags=["wallets"], dependencies=[Depends(require_service_token)])
 

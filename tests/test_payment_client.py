@@ -153,3 +153,58 @@ async def test_factory_builds_one_shared_client_only_when_url_is_set():
 
     await client.close()
     assert client.http_client.is_closed
+
+
+async def test_declined_payment_keeps_its_id(delays):
+    transport = Transport((409, {"id": 101, "order_id": 7, "status": "failed", "detail": "Недостаточно средств"}))
+
+    result = await make_client(transport).charge(7, 3, Decimal("10.00"))
+
+    assert result == PaymentResult(PaymentStatus.FAILED, payment_id=101, detail="Недостаточно средств")
+
+
+async def test_wallet_and_refund_calls_follow_contract(delays):
+    transport = Transport(
+        (200, {"user_id": 3, "balance": "120.50"}),
+        (200, {"user_id": 3, "balance": "220.50"}),
+        (200, {"id": 100, "order_id": 7, "status": "refunded"}),
+    )
+    client = make_client(transport)
+
+    assert await client.get_balance(3) == Decimal("120.50")
+    assert await client.top_up(3, Decimal("100"), "admin-1") == Decimal("220.50")
+    await client.refund(100)
+
+    balance, top_up, refund = transport.requests
+    assert (balance.method, balance.url.path) == ("GET", "/api/v1/wallets/3")
+    assert "Idempotency-Key" not in balance.headers
+    assert (top_up.method, top_up.url.path) == ("POST", "/api/v1/wallets/3/top-up")
+    assert json.loads(top_up.content) == {"amount": "100.00"}
+    assert top_up.headers["Idempotency-Key"] == "admin-1"
+    assert (refund.method, refund.url.path) == ("POST", "/api/v1/payments/100/refund")
+
+
+async def test_wallet_calls_are_retried_and_then_unavailable(delays):
+    transport = Transport(httpx.ConnectError("refused"), (200, {"user_id": 3, "balance": "1.00"}))
+    assert await make_client(transport).get_balance(3) == Decimal("1.00")
+
+    down = Transport(*[(503, {"detail": "down"})] * 2)
+    with pytest.raises(PaymentUnavailableError):
+        await make_client(down, max_retries=1).refund(100)
+
+
+async def test_reused_top_up_key_becomes_validation_error(delays):
+    from sfmshop.core.exceptions import ValidationError
+
+    transport = Transport((422, {"detail": "Ключ идемпотентности уже использован с другими параметрами"}))
+
+    with pytest.raises(ValidationError, match="Ключ"):
+        await make_client(transport).top_up(3, Decimal("5.00"), "admin-1")
+
+
+async def test_factory_sends_service_token_on_every_request():
+    client = create_payment_client(AppSettings(payment_service_url="http://payment", payment_service_token="secret"))
+
+    assert client is not None
+    assert client.http_client.headers["X-Service-Token"] == "secret"
+    await client.close()

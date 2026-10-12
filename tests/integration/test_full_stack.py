@@ -77,9 +77,21 @@ def admin(client):
 @pytest.fixture(scope="module")
 def buyer(client, admin):
     user, email = register(client, "buyer")
-    response = client.put(f"/v1/users/{user['id']}", json={"balance": "1000.00"}, headers=admin)
-    assert response.status_code == 200, response.text
+    top_up(client, admin, user["id"], "1000.00")
     return user, login(client, email)
+
+
+def top_up(client, admin, user_id, amount, key=None):
+    response = client.post(f"/v1/users/{user_id}/top-up", json={"amount": amount},
+                           headers={**admin, "Idempotency-Key": key or unique("top-up")})
+    assert response.status_code == 200, response.text
+    return response.json()["balance"]
+
+
+def balance(client, headers, user_id):
+    response = client.get(f"/v1/users/{user_id}/balance", headers=headers)
+    assert response.status_code == 200, response.text
+    return Decimal(response.json()["balance"])
 
 
 def create_product(client, admin, name=None, price="100.00", quantity=10):
@@ -108,7 +120,7 @@ def test_register_login_and_read_own_profile(client):
 
     assert response.status_code == 200
     assert response.json()["email"] == email
-    assert response.json()["balance"] == "0.00"
+    assert balance(client, headers, user["id"]) == Decimal("0.00")
 
 
 def test_price_change_reaches_cache_through_rabbitmq(client, admin):
@@ -132,7 +144,7 @@ def test_order_charges_balance_reduces_stock_and_lands_in_event_log(client, admi
     assert response.json()["status"] == "paid"
     order_id = response.json()["id"]
 
-    assert Decimal(client.get(f"/v1/users/{user['id']}", headers=headers).json()["balance"]) == Decimal("759.00")
+    assert balance(client, headers, user["id"]) == Decimal("759.00")
     eventually(lambda: client.get(f"/v1/products/{product_id}").json()["quantity"] == 3)
 
     def logged():
@@ -202,3 +214,23 @@ def test_product_search_escapes_wildcards_on_real_postgres(client, admin):
     assert len(client.portal.call(lambda: search(name_query=marker))) == 3
     assert len(client.portal.call(lambda: search(name_query=marker, min_price=Decimal("10")))) == 2
     assert len(client.portal.call(lambda: search(name_query=marker, in_stock=True))) == 2
+
+
+def test_wallet_lives_in_payment_service_and_admin_delete_refunds(client, admin, buyer):
+    user, headers = buyer
+    key = unique("admin-top-up")
+    start = balance(client, headers, user["id"])
+
+    assert Decimal(top_up(client, admin, user["id"], "100.00", key)) == start + 100
+    assert Decimal(top_up(client, admin, user["id"], "100.00", key)) == start + 100
+
+    product_id = create_product(client, admin, price="30.00", quantity=5)
+    order = client.post("/v1/orders/", json={"items": [{"product_id": product_id, "quantity": 2}]}, headers=headers)
+    assert order.status_code == 201, order.text
+    assert order.json()["status"] == "paid"
+    assert balance(client, headers, user["id"]) == start + 40
+    assert client.post(f"/v1/orders/{order.json()['id']}/pay", headers=headers).status_code == 409
+
+    assert client.delete(f"/v1/orders/{order.json()['id']}", headers=admin).status_code == 204
+    assert balance(client, headers, user["id"]) == start + 100
+    eventually(lambda: client.get(f"/v1/products/{product_id}").json()["quantity"] == 5)

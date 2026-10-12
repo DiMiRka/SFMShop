@@ -1,15 +1,21 @@
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
 from loguru import logger
 
 from sfmshop.repositories import OrderRepository, UserRepository, ProductRepository
 from sfmshop.services.cache_service import CacheService
 from sfmshop.services.queue_producer import QueueProducer
 from sfmshop.core.metrics import ORDERS_CREATED
-from sfmshop.core.order_status import OrderStatus, ensure_transition
+from sfmshop.core.order_status import OrderStatus, can_transition, ensure_transition
 from sfmshop.database.models import Order
-from sfmshop.schemas import (OrderResponse, OrderCreate, UserUpdatePatch, ProductUpdate,
-                             OrderInDB, OrderItemsInDB)
-from sfmshop.core.exceptions import InsufficientStockError, NotFoundError, ValidationError
+from sfmshop.schemas import OrderResponse, OrderCreate, ProductUpdate, OrderInDB, OrderItemsInDB
+if TYPE_CHECKING:
+    from sfmshop.clients.payment_client import PaymentClient
+from sfmshop.core.exceptions import (InsufficientStockError, InvalidOrderStatusError, NotFoundError,
+                                     PaymentUnavailableError, ValidationError)
 
 
 class OrderService:
@@ -19,12 +25,14 @@ class OrderService:
             user_rep: UserRepository,
             product_rep: ProductRepository,
             cache: CacheService,
-            queue: QueueProducer):
+            queue: QueueProducer,
+            payments: PaymentClient | None = None):
         self.order_rep = order_rep
         self.user_rep = user_rep
         self.product_rep = product_rep
         self.cache = cache
         self.queue = queue
+        self.payments = payments
 
     async def get_all_orders(
             self,
@@ -126,31 +134,48 @@ class OrderService:
         await self.queue.publish_event("order_exchange", "order.created",
                                        self._event(order_db_id, user_id, product_ids))
 
-        return await self.pay_order(order_db_id, user_id)
+        try:
+            return await self.pay_order(order_db_id, user_id)
+        except PaymentUnavailableError:
+            logger.warning(f"Order id={order_db_id} stays pending: payment service unavailable")
+            async with self.order_rep.db.begin():
+                return self._to_response(await self._get_for_update(order_db_id, user_id))
 
     async def pay_order(self, order_id: int, user_id: int | None) -> dict:
         async with self.order_rep.db.begin():
             order = await self._get_for_update(order_id, user_id)
             ensure_transition(order.status, OrderStatus.PAID)
+            owner_id, total = order.user_id, order.total
 
-            user_db = await self.user_rep.get_by_id_for_update(order.user_id)
+        payment = await self._require_payments().charge(order_id, owner_id, total)
+        paid = payment.status == "success"
+        target = OrderStatus.PAID if paid else OrderStatus.FAILED
 
-            if not user_db:
-                logger.warning(f"User id={order.user_id} not found")
-                raise NotFoundError("Пользователь не найден")
+        async with self.order_rep.db.begin():
+            latest = await self.order_rep.get_by_id_for_update(order_id)
 
-            if user_db.balance >= order.total:
-                user_db.balance -= order.total
-                order.status = OrderStatus.PAID
+            if latest is None:
+                recorded = applicable = False
             else:
-                logger.info(f"Order id={order_id} payment failed: insufficient balance")
-                order.status = OrderStatus.FAILED
+                recorded = latest.status == OrderStatus.PAID and latest.payment_id == payment.payment_id
+                applicable = not recorded and can_transition(latest.status, target)
+                if applicable:
+                    latest.status = target
+                    latest.payment_id = payment.payment_id
+                result = self._to_response(latest)
 
-            result = self._to_response(order)
+        if recorded:
+            return result
 
-        routing_key = "order.paid" if order.status == OrderStatus.PAID else "order.payment_failed"
+        if latest is None or not applicable:
+            if paid and payment.payment_id is not None:
+                logger.warning(f"Order id={order_id} changed during payment, refunding payment id={payment.payment_id}")
+                await self._require_payments().refund(payment.payment_id)
+            raise InvalidOrderStatusError("Заказ изменился во время оплаты, повторите запрос")
+
+        routing_key = "order.paid" if paid else "order.payment_failed"
         await self.queue.publish_event("order_exchange", routing_key,
-                                       self._event(order_id, order.user_id, self._product_ids(order)))
+                                       self._event(order_id, owner_id, self._product_ids(latest)))
 
         return result
 
@@ -172,17 +197,16 @@ class OrderService:
     async def delete_order(self, order_id: int):
         async with self.order_rep.db.begin():
             order = await self._get_for_update(order_id, None)
-            owner_id = order.user_id
+            seen_status, owner_id, payment_id = order.status, order.user_id, order.payment_id
 
-            if order.status == OrderStatus.PAID:
-                user_db = await self.user_rep.get_by_id_for_update(owner_id)
+        if seen_status == OrderStatus.PAID and payment_id is not None:
+            await self._require_payments().refund(payment_id)
 
-                if not user_db:
-                    logger.warning(f"User id={owner_id} not found")
-                    raise NotFoundError("Пользователь не найден")
+        async with self.order_rep.db.begin():
+            order = await self._get_for_update(order_id, None)
 
-                new_user_data = UserUpdatePatch(balance=user_db.balance + order.total).model_dump(exclude_unset=True)
-                await self.user_rep.update(user_db, new_user_data)
+            if order.status != seen_status:
+                raise InvalidOrderStatusError("Заказ изменился во время удаления, повторите запрос")
 
             if order.status != OrderStatus.CANCELLED:
                 await self._return_stock(order)
@@ -195,6 +219,11 @@ class OrderService:
                                        self._event(order_id, owner_id, product_ids))
 
         return {"id": order_id, "message": "Заказ удален"}
+
+    def _require_payments(self) -> PaymentClient:
+        if self.payments is None:
+            raise PaymentUnavailableError("Сервис оплаты не настроен")
+        return self.payments
 
     async def _get_for_update(self, order_id: int, user_id: int | None) -> Order:
         order = await self.order_rep.get_by_id_for_update(order_id)

@@ -1,6 +1,6 @@
 from sfmshop.schemas.base import Base
 from sfmshop.schemas.products import ProductCreate, ProductUpdate, ProductResponse, ProductDetailResponse
-from sfmshop.schemas.users import UserCreate, UserInDB, UserResponse, UserUpdatePatch
+from sfmshop.schemas.users import BalanceResponse, TopUpRequest, UserCreate, UserInDB, UserResponse, UserUpdatePatch
 from sfmshop.schemas.orders import OrderCreate, OrderResponse, OrderItemBase, OrderInDB, OrderItemsInDB
 from sfmshop.schemas.token import Token, TokenData
 
@@ -14,6 +14,8 @@ __all__ = [
     'UserInDB',
     'UserUpdatePatch',
     'UserResponse',
+    'TopUpRequest',
+    'BalanceResponse',
     'OrderCreate',
     'OrderResponse',
     'OrderItemBase',

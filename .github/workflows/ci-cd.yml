@@ -97,6 +97,74 @@ jobs:
           docker run --rm --entrypoint pip sfmshop:ci check
           docker run --rm --entrypoint python sfmshop:ci -c "import sfmshop.api.main"
 
+      - name: Build payment-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: payment_service
+          push: false
+          load: true
+          tags: sfmshop-payment:ci
+          cache-from: type=gha,scope=payment
+          cache-to: type=gha,mode=max,scope=payment
+
+      - name: Smoke test payment-service image
+        run: |
+          docker run --rm --entrypoint pip sfmshop-payment:ci check
+          docker run --rm --entrypoint python sfmshop-payment:ci -c "import payment.main"
+
+  payment-service:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: payment_service
+
+    env:
+      PAYMENT_DB_HOST: localhost
+      PAYMENT_DB_PORT: 5432
+      PAYMENT_DB_USER: postgres
+      PAYMENT_DB_PASSWORD: postgres
+      PAYMENT_DB_NAME: payment_test
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: |
+          pip install ruff==0.15.21
+          ruff check .
+
+      - name: Type check with mypy
+        run: |
+          pip install mypy==2.3.0
+          mypy payment/ --ignore-missing-imports
+
+      - name: Run tests
+        run: pytest --cov=payment
+
   integration:
     runs-on: ubuntu-latest
 
@@ -116,6 +184,13 @@ jobs:
       RABBITMQ_URL: amqp://guest:guest@localhost:5672/
       MONGO_URL: mongodb://localhost:27017
       RUN_INTEGRATION_TESTS: "1"
+      PAYMENT_SERVICE_URL: http://localhost:8001
+      PAYMENT_SERVICE_TOKEN: ci-payment-token
+      PAYMENT_DB_HOST: localhost
+      PAYMENT_DB_PORT: 5432
+      PAYMENT_DB_USER: postgres
+      PAYMENT_DB_PASSWORD: postgres
+      PAYMENT_DB_NAME: payment_db
 
     services:
       postgres:
@@ -174,11 +249,29 @@ jobs:
       - name: Apply migrations
         run: alembic upgrade head
 
+      - name: Start payment-service
+        working-directory: payment_service
+        run: |
+          pip install -r requirements.txt
+          PGPASSWORD=postgres createdb -h localhost -U postgres payment_db
+          alembic upgrade head
+          nohup uvicorn payment.main:app --port 8001 > payment.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8001/health/ready && exit 0
+            sleep 1
+          done
+          cat payment.log
+          exit 1
+
       - name: Run integration tests
         run: pytest tests/integration -v
 
+      - name: Payment-service log
+        if: failure()
+        run: cat payment_service/payment.log
+
   deploy:
-    needs: [ test, build, integration ]
+    needs: [ test, build, payment-service, integration ]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     permissions:
@@ -214,6 +307,16 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Build and push payment-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: payment_service
+          push: true
+          cache-from: type=gha,scope=payment
+          tags: |
+            ${{ env.IMAGE_NAME }}-payment:latest
+            ${{ env.IMAGE_NAME }}-payment:${{ github.sha }}
 
       - name: Deploy over SSH
         if: env.DEPLOY_HOST != ''

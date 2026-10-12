@@ -2,10 +2,10 @@ from decimal import Decimal
 
 from loguru import logger
 
-from payment_service.payment.core.exceptions import ConflictError, IdempotencyKeyReusedError, NotFoundError
-from payment_service.payment.database.models import Payment, PaymentStatus, TransactionKind, Wallet, WalletTransaction
-from payment_service.payment.repository import PaymentRepository
-from payment_service.payment.schemas import ChargeRequest
+from payment.core.exceptions import ConflictError, IdempotencyKeyReusedError, NotFoundError
+from payment.database.models import Payment, PaymentStatus, TransactionKind, Wallet, WalletTransaction
+from payment.repository import PaymentRepository
+from payment.schemas import ChargeRequest
 
 
 class PaymentService:

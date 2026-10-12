@@ -6,13 +6,14 @@ import pytest
 from pydantic import ValidationError as PydanticValidationError
 
 from sfmshop.core.order_status import OrderStatus
-from sfmshop.core.exceptions import ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
+from sfmshop.core.exceptions import PaymentUnavailableError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
 from sfmshop.database.models import Product as DbProduct, User as DbUser
 from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 from sfmshop.core.security import get_password_hash, verify_password
 from sfmshop.services.order_service import OrderService
 from sfmshop.services.product_service import ProductService
 from sfmshop.services.user_service import UserService
+from sfmshop.clients.payment_client import PaymentResult, PaymentStatus
 
 
 pytestmark = pytest.mark.anyio
@@ -40,6 +41,45 @@ class FakeCache:
         return await func()
 
 
+class FakePayments:
+    def __init__(self, balance=Decimal("100.00")):
+        self.balances = {1: balance}
+        self.payments = {500: {"order_id": 7, "user_id": 1, "amount": Decimal("20.00"), "status": "success"}}
+        self.top_ups = {}
+        self.refunds = []
+
+    async def charge(self, order_id, user_id, amount):
+        for payment_id, payment in self.payments.items():
+            if payment["order_id"] == order_id and payment["status"] == "success":
+                return PaymentResult(PaymentStatus.SUCCESS, payment_id)
+
+        payment_id = 500 + len(self.payments)
+        paid = self.balances.get(user_id, Decimal("0")) >= amount
+        if paid:
+            self.balances[user_id] -= amount
+        self.payments[payment_id] = {"order_id": order_id, "user_id": user_id, "amount": amount,
+                                     "status": "success" if paid else "failed"}
+        if paid:
+            return PaymentResult(PaymentStatus.SUCCESS, payment_id)
+        return PaymentResult(PaymentStatus.FAILED, payment_id, "Недостаточно средств")
+
+    async def refund(self, payment_id):
+        payment = self.payments[payment_id]
+        if payment["status"] == "success":
+            self.balances[payment["user_id"]] += payment["amount"]
+            payment["status"] = "refunded"
+        self.refunds.append(payment_id)
+
+    async def get_balance(self, user_id):
+        return self.balances.get(user_id, Decimal("0"))
+
+    async def top_up(self, user_id, amount, idempotency_key):
+        if idempotency_key not in self.top_ups:
+            self.top_ups[idempotency_key] = (user_id, amount)
+            self.balances[user_id] = self.balances.get(user_id, Decimal("0")) + amount
+        return self.balances[user_id]
+
+
 class FakeQueue:
     def __init__(self):
         self.events = []
@@ -56,8 +96,8 @@ def db_product(product_id=1, name="Mouse", price=Decimal("10.00"), quantity=5):
     return product
 
 
-def db_user(user_id=1, name="Dima", email="dima@test.com", balance=Decimal("100.00")):
-    user = DbUser(name=name, email=email, age=30, balance=balance, hashed_password="hash", is_active=True, is_admin=False)
+def db_user(user_id=1, name="Dima", email="dima@test.com"):
+    user = DbUser(name=name, email=email, age=30, hashed_password="hash", is_active=True, is_admin=False)
     user.id = user_id
     user.created_at = datetime(2026, 1, 1)
     return user
@@ -126,7 +166,7 @@ class UserRepoFake:
 
     async def create(self, data):
         self.created = data
-        return db_user(2, data["name"], data["email"], Decimal(str(data["balance"])))
+        return db_user(2, data["name"], data["email"])
 
     async def update(self, user, data):
         self.updated = (user, data)
@@ -145,6 +185,7 @@ class OrderRepoFake:
             id=7,
             user_id=1,
             status=OrderStatus.PAID,
+            payment_id=500,
             total=Decimal("20.00"),
             created_at=datetime(2026, 1, 1),
             items=[item],
@@ -180,7 +221,7 @@ class OrderRepoFake:
     async def create(self, data):
         self.created = data
         self.orders[77] = SimpleNamespace(
-            **{"id": 77, "status": OrderStatus.PENDING, "created_at": datetime(2026, 1, 1), **data})
+            **{"id": 77, "status": OrderStatus.PENDING, "payment_id": None, "created_at": datetime(2026, 1, 1), **data})
         return 77
 
     async def create_order_item(self, data):
@@ -230,10 +271,10 @@ async def test_user_service_success_auth_and_not_found():
     assert (await service.get_users(10, 0))[0]["email"] == "dima@test.com"
     assert (await service.get_user_by_id(1))["id"] == 1
     registered = await service.register_user(
-        UserCreate(name="New", email="new@test.com", age=22, balance=50, password="abc12345")
+        UserCreate(name="New", email="new@test.com", age=22, password="abc12345")
     )
     assert registered["email"] == "new@test.com"
-    assert users.created["balance"] == 0
+    assert "balance" not in users.created and "balance" not in registered
     assert "is_admin" not in users.created
     assert registered["is_admin"] is False
 
@@ -317,7 +358,8 @@ async def test_order_service_success_and_error_paths():
     users = UserRepoFake()
     products = ProductRepoFake()
     queue = FakeQueue()
-    service = OrderService(orders, users, products, FakeCache(), queue)
+    payments = FakePayments()
+    service = OrderService(orders, users, products, FakeCache(), queue, payments)
 
     assert (await service.get_all_orders(1, 10, 0))[0]["items"][0]["total"] == "20.00"
     assert (await service.get_order_by_id(7, 1))["id"] == 7
@@ -333,7 +375,8 @@ async def test_order_service_success_and_error_paths():
         "items": [{"product_id": 1, "quantity": 2, "total": "20.00"}],
     }
     assert products.product.quantity == 3
-    assert users.user.balance == Decimal("80.00")
+    assert payments.balances[1] == Decimal("80.00")
+    assert orders.orders[77].payment_id == 501
     assert orders.created_items[0]["order_id"] == 77
     assert [event[1] for event in queue.events] == ["order.created", "order.paid"]
 
@@ -356,6 +399,22 @@ async def test_order_service_success_and_error_paths():
     users.user = None
     with pytest.raises(NotFoundError):
         await service.create_order(1, order_create)
+
+
+async def test_order_stays_pending_when_payment_service_is_unavailable():
+    orders, products, queue = OrderRepoFake(), ProductRepoFake(), FakeQueue()
+    service = OrderService(orders, UserRepoFake(), products, FakeCache(), queue, payments=None)
+
+    created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
+
+    assert created["status"] == "pending"
+    assert products.product.quantity == 3
+    assert [event[1] for event in queue.events] == ["order.created"]
+    with pytest.raises(PaymentUnavailableError):
+        await service.pay_order(77, 1)
+    with pytest.raises(PaymentUnavailableError):
+        await service.delete_order(7)
+    assert orders.deleted is None
 
 
 async def test_order_service_hides_foreign_orders():
@@ -389,7 +448,8 @@ async def test_order_service_admin_manages_any_order():
     users = UserRepoFake()
     products = ProductRepoFake()
     cache = FakeCache()
-    service = OrderService(orders, users, products, cache, FakeQueue())
+    payments = FakePayments()
+    service = OrderService(orders, users, products, cache, FakeQueue(), payments)
     all_users = None
 
     orders.get_user_orders = None
@@ -399,16 +459,17 @@ async def test_order_service_admin_manages_any_order():
 
     await service.delete_order(7)
     assert orders.deleted is orders.order
-    refunded_user, data = users.updated
-    assert refunded_user.id == 1
-    assert data == {"balance": Decimal("120.00")}
+    assert payments.refunds == [500]
+    assert payments.balances[1] == Decimal("120.00")
+    assert users.updated is None
 
 
 async def test_order_service_stock_balance_and_product_errors():
     orders = OrderRepoFake()
     users = UserRepoFake()
     products = ProductRepoFake()
-    service = OrderService(orders, users, products, FakeCache(), FakeQueue())
+    payments = FakePayments(balance=Decimal("1.00"))
+    service = OrderService(orders, users, products, FakeCache(), FakeQueue(), payments)
 
     with pytest.raises(NotFoundError):
         await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=999, quantity=1)]))
@@ -418,18 +479,18 @@ async def test_order_service_stock_balance_and_product_errors():
         await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
 
     products.product.quantity = 5
-    users.user.balance = Decimal("1.00")
     created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
     assert created["status"] == "failed"
-    assert users.user.balance == Decimal("1.00")
+    assert payments.balances[1] == Decimal("1.00")
     assert products.product.quantity == 3
 
 
-async def test_balance_with_kopecks_survives_refund_and_profile():
+async def test_paid_order_refund_with_kopecks_and_locked_stock_return():
     orders = OrderRepoFake()
     orders.order.total = Decimal("20.25")
     users = UserRepoFake()
-    users.user.balance = Decimal("100.50")
+    payments = FakePayments(balance=Decimal("100.50"))
+    payments.payments[500]["amount"] = Decimal("20.25")
     products = ProductRepoFake()
 
     async def unlocked_read(ids):
@@ -437,18 +498,13 @@ async def test_balance_with_kopecks_survives_refund_and_profile():
 
     products.get_by_ids = unlocked_read
     products.get_by_ids_for_update = lambda ids: async_return([p for p in products.products if p.id in ids])
-    service = OrderService(orders, users, products, FakeCache(), FakeQueue())
+    service = OrderService(orders, users, products, FakeCache(), FakeQueue(), payments)
 
     await service.delete_order(7)
 
-    assert users.user.balance == Decimal("120.75")
+    assert payments.refunds == [500]
+    assert payments.balances[1] == Decimal("120.75")
     assert products.product.quantity == 7
-
-    user_service = UserService(users, OrderRepoFake(), FakeCache(), FakeQueue())
-    assert (await user_service.get_user_by_id(1))["balance"] == "120.75"
-    assert UserUpdatePatch(balance=Decimal("99.99")).balance == Decimal("99.99")
-    with pytest.raises(PydanticValidationError):
-        UserUpdatePatch(balance=Decimal("1.999"))
 
 
 async def async_return(value):

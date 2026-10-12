@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import Header, HTTPException, status
 
-from payment_service.payment.core.config import settings
+from payment.core.config import settings
 
 
 async def require_service_token(x_service_token: Annotated[str | None, Header()] = None) -> None:

@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from payment_service.payment.core.config import settings
+from payment.core.config import settings
 
 
 engine = create_async_engine(settings.postgres_url, pool_pre_ping=True)

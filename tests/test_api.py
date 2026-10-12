@@ -216,5 +216,5 @@ def test_register_returns_created_user_matching_response_schema():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["email"] == "new@test.com" and body["balance"] == "0"
+    assert body["email"] == "new@test.com" and "balance" not in body
     assert "hashed_password" not in body

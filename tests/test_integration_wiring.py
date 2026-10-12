@@ -85,8 +85,15 @@ async def test_dependency_factories_and_current_user(monkeypatch):
     assert product_service.product_rep == "product-rep"
     user_service = await deps.get_user_write_service("user-rep", "order-rep", "cache", "queue")
     assert user_service.user_rep == "user-rep"
-    order_service = await deps.get_order_write_service("order-rep", "user-rep", "product-rep", "cache", "queue")
-    assert order_service.order_rep == "order-rep"
+    order_service = await deps.get_order_write_service("order-rep", "user-rep", "product-rep", "cache", "queue",
+                                                       "payments")
+    assert order_service.order_rep == "order-rep" and order_service.payments == "payments"
+    wallet_service = await deps.get_wallet_service("user-rep", None)
+    assert wallet_service.user_rep == "user-rep" and wallet_service.payments is None
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    assert deps.get_payment_client(request) is None
+    request.app.state.payment_client = "client"
+    assert deps.get_payment_client(request) == "client"
 
     user = SimpleNamespace(id=7, is_active=True)
     monkeypatch.setattr(deps, "decode_token", lambda token: async_value({"sub": "7"}))

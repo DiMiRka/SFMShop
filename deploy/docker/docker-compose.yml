@@ -34,6 +34,9 @@ services:
         RATE_LIMIT_STORAGE_URI: redis://redis:6379/0
 
         ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+        PAYMENT_SERVICE_URL: http://payment:8001
+        PAYMENT_SERVICE_TOKEN: ${PAYMENT_SERVICE_TOKEN:?set PAYMENT_SERVICE_TOKEN in .env}
     depends_on:
       db:
         condition: service_healthy
@@ -43,8 +46,43 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
+      payment:
+        condition: service_healthy
     volumes:
       - ../../sfmshop:/app/sfmshop
+
+  payment:
+    build:
+      context: ../../payment_service
+    environment:
+      PAYMENT_DB_HOST: payment-db
+      PAYMENT_DB_PORT: 5432
+      PAYMENT_DB_NAME: payment_db
+      PAYMENT_DB_USER: ${PAYMENT_DB_USER:-postgres}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?set PAYMENT_DB_PASSWORD in .env}
+      PAYMENT_SERVICE_TOKEN: ${PAYMENT_SERVICE_TOKEN:?set PAYMENT_SERVICE_TOKEN in .env}
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      payment-db:
+        condition: service_healthy
+
+  payment-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: ${PAYMENT_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?set PAYMENT_DB_PASSWORD in .env}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER:-postgres} -d payment_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - payment_postgres_data:/var/lib/postgresql/data
 
   db:
     image: postgres:17
@@ -141,3 +179,4 @@ volumes:
   postgres_data:
   redis_data:
   mongo_data:
+  payment_postgres_data:

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, status
+from typing import Annotated
 
-from sfmshop.schemas import UserUpdatePatch, UserResponse
-from sfmshop.core.dependencies import admin_user, current_user, user_write_service, user_read_service
+from fastapi import APIRouter, Header, status
+
+from sfmshop.schemas import BalanceResponse, TopUpRequest, UserUpdatePatch, UserResponse
+from sfmshop.core.dependencies import admin_user, current_user, user_write_service, user_read_service, wallet_service
 from sfmshop.core.permissions import ensure_can_update_user, ensure_self_or_admin
 
 
@@ -37,3 +39,21 @@ async def delete_user(cu: current_user, service: user_write_service, user_id: in
 async def get_user_orders(cu: current_user, service: user_read_service, user_id: int):
     ensure_self_or_admin(cu, user_id)
     return await service.get_user_orders(user_id)
+
+
+@users_router.get("/{user_id}/balance", summary="Баланс пользователя",
+                  response_model=BalanceResponse, status_code=status.HTTP_200_OK)
+async def get_balance(cu: current_user, service: wallet_service, user_id: int):
+    ensure_self_or_admin(cu, user_id)
+    return await service.get_balance(user_id)
+
+
+@users_router.post("/{user_id}/top-up", summary="Пополнить баланс (администратор)",
+                   response_model=BalanceResponse, status_code=status.HTTP_200_OK)
+async def top_up(
+        admin: admin_user,
+        service: wallet_service,
+        user_id: int,
+        request: TopUpRequest,
+        idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=64)]):
+    return await service.top_up(user_id, request.amount, idempotency_key)

@@ -4,12 +4,12 @@ from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from payment_service.payment.api.health import health_router
-from payment_service.payment.api.payments import payments_router
-from payment_service.payment.api.wallets import wallets_router
-from payment_service.payment.core.config import settings
-from payment_service.payment.core.exceptions import ConflictError, IdempotencyKeyReusedError, NotFoundError
-from payment_service.payment.database.connection import engine
+from payment.api.health import health_router
+from payment.api.payments import payments_router
+from payment.api.wallets import wallets_router
+from payment.core.config import settings
+from payment.core.exceptions import ConflictError, IdempotencyKeyReusedError, NotFoundError
+from payment.database.connection import engine
 
 
 @asynccontextmanager

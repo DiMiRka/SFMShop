@@ -3,8 +3,6 @@ from typing import Any
 
 from prometheus_client import Counter, Histogram, disable_created_metrics, start_http_server
 
-from sfmshop.services.log_service import log_service
-
 
 disable_created_metrics()
 
@@ -58,6 +56,8 @@ def route_label(scope: Mapping[str, Any]) -> str:
 
 
 def start_metrics_server(port: int | None) -> bool:
+    from sfmshop.services.log_service import log_service
+
     if not port:
         return False
 

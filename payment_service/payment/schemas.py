@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import Header
 from pydantic import BaseModel, ConfigDict, Field
 
-from payment_service.payment.database.models import PaymentStatus
+from payment.database.models import PaymentStatus
 
 
 Money = Annotated[Decimal, Field(gt=0, max_digits=10, decimal_places=2)]

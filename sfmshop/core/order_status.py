@@ -24,6 +24,10 @@ _ACTIONS = {
 }
 
 
+def can_transition(current: str, target: OrderStatus) -> bool:
+    return target in ORDER_TRANSITIONS[OrderStatus(current)]
+
+
 def ensure_transition(current: str, target: OrderStatus) -> None:
-    if target not in ORDER_TRANSITIONS[OrderStatus(current)]:
+    if not can_transition(current, target):
         raise InvalidOrderStatusError(f"Нельзя {_ACTIONS[target]} заказ в статусе {current}")

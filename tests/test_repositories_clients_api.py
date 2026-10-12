@@ -80,7 +80,7 @@ async def test_repositories_delegate_to_session_and_mutate_models():
     await product_repo.delete(product)
     assert product_db.deleted == [product]
 
-    user = DbUser(name="U", email="u@test.com", age=18, balance=1, hashed_password="h")
+    user = DbUser(name="U", email="u@test.com", age=18, hashed_password="h")
     user.id = 6
     user_db = RepoDb(ExecuteResult([user], user))
     user_repo = UserRepository(user_db)
@@ -89,7 +89,7 @@ async def test_repositories_delegate_to_session_and_mutate_models():
     assert await user_repo.get_by_id_for_update(6) is user
     assert await user_repo.get_by_email(user.email) is user
     created_user = await user_repo.create(
-        {"name": "U", "email": "u2@test.com", "age": 18, "balance": 1, "hashed_password": "h"}
+        {"name": "U", "email": "u2@test.com", "age": 18, "hashed_password": "h"}
     )
     assert created_user.id == 123
     await user_repo.update(user, {"name": "Changed"})

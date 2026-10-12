@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import JSONResponse
 
-from payment_service.payment.api.dependencies import payment_service
-from payment_service.payment.core.security import require_service_token
-from payment_service.payment.database.models import PaymentStatus
-from payment_service.payment.schemas import ChargeRequest, IdempotencyKey, PaymentDeclined, PaymentDetail, PaymentShort
+from payment.api.dependencies import payment_service
+from payment.core.security import require_service_token
+from payment.database.models import PaymentStatus
+from payment.schemas import ChargeRequest, IdempotencyKey, PaymentDeclined, PaymentDetail, PaymentShort
 
 payments_router = APIRouter(prefix="/payments", tags=["payments"], dependencies=[Depends(require_service_token)])
 

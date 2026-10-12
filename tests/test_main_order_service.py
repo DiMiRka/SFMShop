@@ -32,10 +32,11 @@ def build_service():
         items=[SimpleNamespace(product_id=2, quantity=1, total=Decimal("300.00"))],
     ))
 
-    user = MagicMock(id=1, balance=Decimal("1000.00"))
     user_rep = MagicMock()
-    user_rep.get_by_id = AsyncMock(return_value=user)
-    user_rep.get_by_id_for_update = AsyncMock(return_value=user)
+    user_rep.get_by_id = AsyncMock(return_value=MagicMock(id=1))
+
+    payments = MagicMock()
+    payments.charge = AsyncMock(return_value=SimpleNamespace(status="success", payment_id=9))
 
     product = MagicMock(id=2, price=Decimal("300.00"), quantity=5)
     product_rep = MagicMock()
@@ -51,6 +52,7 @@ def build_service():
         product_rep=product_rep,
         cache=cache,
         queue=queue,
+        payments=payments,
     )
     return service, order_rep, user_rep, product_rep, queue
 
@@ -64,7 +66,8 @@ async def test_order_service_create_order_happy_path_with_mocks():
     assert result["id"] == 42
     assert result["status"] == "paid"
     assert result["total"] == "300.00"
-    user_rep.get_by_id_for_update.assert_awaited_once_with(1)
+    user_rep.get_by_id.assert_awaited_once_with(1)
+    service.payments.charge.assert_awaited_once_with(42, 1, Decimal("300.00"))
     product_rep.get_by_ids_for_update.assert_awaited_once_with([2])
     order_rep.create.assert_awaited_once()
     order_rep.create_order_item.assert_awaited_once()

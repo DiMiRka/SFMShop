@@ -114,13 +114,12 @@ def test_schemas_validate_and_serialize():
         name="Dima",
         email="dima@test.com",
         age=31,
-        balance=100,
         password="abc12345",
     )
     # Баланс при регистрации игнорируется: новый пользователь всегда начинает с нуля
     user_in_db = UserInDB(**user.model_dump(), hashed_password="hash")
     assert user_in_db.hashed_password == "hash"
-    assert user_in_db.balance == 0
+    assert "balance" not in user_in_db.model_dump()
     assert user_in_db.is_active is True
     assert UserUpdatePatch(name="New").model_dump(exclude_unset=True) == {"name": "New"}
     assert UserResponse(
@@ -128,7 +127,6 @@ def test_schemas_validate_and_serialize():
         name=user.name,
         email=user.email,
         age=user.age,
-        balance=0,
         is_active=True,
         is_admin=False,
         created_at=datetime(2026, 1, 1),
@@ -240,7 +238,7 @@ def test_product_update_allows_restock_above_create_limit():
 
 
 def test_user_patch_rejects_explicit_nulls_except_current_password():
-    for field in ("name", "email", "age", "balance", "is_active", "is_admin", "password"):
+    for field in ("name", "email", "age", "is_active", "is_admin", "password"):
         with pytest.raises(PydanticValidationError):
             UserUpdatePatch.model_validate({field: None})
 

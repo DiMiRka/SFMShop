@@ -15,11 +15,13 @@ from sfmshop.repositories import ProductRepository, OrderRepository, UserReposit
 from sfmshop.services import ProductService, UserService, OrderService
 from sfmshop.core.config import app_settings
 from sfmshop.clients.llm import LLMClient
+from sfmshop.clients.payment_client import PaymentClient
 from sfmshop.core.exceptions import LLMUnavailableError
 from sfmshop.services.assistant import AssistantService
 from sfmshop.services.health_service import HealthService
 from sfmshop.services.event_log_service import EventLogService
 from sfmshop.services.review_service import ReviewService
+from sfmshop.services.wallet_service import WalletService
 from sfmshop.database.connection import engine, engine_replica
 
 
@@ -45,6 +47,13 @@ def get_llm_client(request: Request) -> LLMClient:
 
 
 llm_client_dependency = Annotated[LLMClient, Depends(get_llm_client)]
+
+
+def get_payment_client(request: Request) -> PaymentClient | None:
+    return getattr(request.app.state, "payment_client", None)
+
+
+payment_client_dependency = Annotated[PaymentClient | None, Depends(get_payment_client)]
 
 
 def get_health_service(request: Request) -> HealthService:
@@ -205,9 +214,10 @@ async def get_order_write_service(
         u_rep: u_rep_write_dependency,
         p_rep: p_rep_write_dependency,
         cache: cache_dependency,
-        queue: queue_dependency
+        queue: queue_dependency,
+        payments: payment_client_dependency
 ) -> OrderService:
-    return OrderService(order_rep=o_rep, user_rep=u_rep, product_rep=p_rep, cache=cache, queue=queue)
+    return OrderService(order_rep=o_rep, user_rep=u_rep, product_rep=p_rep, cache=cache, queue=queue, payments=payments)
 
 
 async def get_order_read_service(
@@ -222,6 +232,13 @@ async def get_order_read_service(
 
 order_write_service = Annotated[OrderService, Depends(get_order_write_service)]
 order_read_service = Annotated[OrderService, Depends(get_order_read_service)]
+
+
+async def get_wallet_service(u_rep: u_rep_write_dependency, payments: payment_client_dependency) -> WalletService:
+    return WalletService(u_rep, payments)
+
+
+wallet_service = Annotated[WalletService, Depends(get_wallet_service)]
 
 
 async def get_review_write_service(

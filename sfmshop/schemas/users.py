@@ -31,22 +31,21 @@ class UserCreate(UserBase):
 
 class UserInDB(UserBase):
     hashed_password: str
-    balance: Decimal = Field(default=Decimal("0"), ge=0, max_digits=10, decimal_places=2)
     is_active: bool = True
 
 
-ADMIN_ONLY_USER_FIELDS = frozenset({"balance", "is_active", "is_admin"})
+ADMIN_ONLY_USER_FIELDS = frozenset({"is_active", "is_admin"})
 
 
 class UserUpdatePatch(PatchBase):
     nullable_fields = frozenset({"current_password"})
+    model_config = ConfigDict(extra="forbid")
 
     name: Optional[str] = Field(default=None, min_length=1, max_length=20)
     password: Optional[str] = Field(default=None, min_length=8, max_length=20)
     current_password: Optional[str] = None
     email: Optional[EmailStr] = None
     age: Optional[int] = Field(default=None, ge=18)
-    balance: Optional[Decimal] = Field(default=None, ge=0, max_digits=10, decimal_places=2)
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
 
@@ -61,9 +60,17 @@ class UserResponse(Base):
     name: str
     email: EmailStr
     age: int
-    balance: Decimal
     is_active: bool
     is_admin: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TopUpRequest(Base):
+    amount: Decimal = Field(..., gt=0, max_digits=10, decimal_places=2)
+
+
+class BalanceResponse(Base):
+    user_id: int
+    balance: Decimal

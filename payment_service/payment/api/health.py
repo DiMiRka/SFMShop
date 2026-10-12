@@ -5,7 +5,7 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from payment_service.payment.database.connection import get_session
+from payment.database.connection import get_session
 
 health_router = APIRouter(prefix="/health", tags=["health"])
 

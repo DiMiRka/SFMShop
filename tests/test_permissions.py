@@ -113,7 +113,6 @@ def test_user_can_access_own_profile():
 
 
 @pytest.mark.parametrize("field, value", [
-    ("balance", 1_000_000),
     ("is_active", False),
     ("is_admin", True),
 ])
@@ -132,12 +131,23 @@ def test_admin_can_change_admin_only_fields_of_any_user():
     service = user_service()
     login_as(ADMIN)
 
-    response = client.put("/v1/users/2", json={"balance": 500, "is_admin": True})
+    response = client.put("/v1/users/2", json={"is_active": False, "is_admin": True})
 
     assert response.status_code == 200
     user_id, update = service.update_user.await_args.args
     assert user_id == 2
-    assert update.model_dump(exclude_unset=True) == {"balance": 500, "is_admin": True}
+    assert update.model_dump(exclude_unset=True) == {"is_active": False, "is_admin": True}
+
+
+@pytest.mark.parametrize("user", [USER, ADMIN])
+def test_profile_update_rejects_unknown_fields_like_balance(user):
+    service = user_service()
+    login_as(user)
+
+    response = client.put("/v1/users/1", json={"balance": 1_000_000})
+
+    assert response.status_code == 422
+    service.update_user.assert_not_awaited()
 
 
 @pytest.mark.parametrize("user, user_id", [(USER, 1), (ADMIN, 99)])

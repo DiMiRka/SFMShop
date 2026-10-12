@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from payment_service.payment.database.models import Base, Payment, PaymentStatus, Wallet, WalletTransaction
+from payment.database.models import Base, Payment, PaymentStatus, Wallet, WalletTransaction
 
 
 class PaymentRepository:

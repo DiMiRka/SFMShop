@@ -14,7 +14,7 @@ from sfmshop.services.product_service import ProductService
 from sfmshop.services.queue_consumer import QueueConsumer
 from sfmshop.services.queue_producer import QueueProducer
 from sfmshop.services.user_service import UserService
-from tests.test_services import FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
+from tests.test_services import FakeCache, FakePayments, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
 
 
 pytestmark = pytest.mark.anyio
@@ -88,7 +88,8 @@ async def test_user_delete_event_invalidates_users_orders_and_products():
 async def test_order_paid_event_invalidates_buyer_order_and_products():
     queue = FakeQueue()
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
-    await OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), queue).create_order(1, order)
+    await OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), queue,
+                       FakePayments()).create_order(1, order)
     consumer, cache = build_consumer()
 
     assert await deliver(consumer, queue) == "order.paid"
@@ -197,16 +198,15 @@ async def test_order_is_created_when_rabbitmq_is_down(monkeypatch):
     producer = QueueProducer("amqp://test", max_retries=3)
     assert await producer._connect() is False
 
-    orders = OrderRepoFake()
-    users = UserRepoFake()
-    service = OrderService(orders, users, ProductRepoFake(), FakeCache(), producer)
+    payments = FakePayments()
+    service = OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), producer, payments)
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
 
     created = await service.create_order(1, order)
 
     assert created["id"] == 77
     assert created["status"] == "paid"
-    assert users.user.balance == Decimal("90.00")
+    assert payments.balances[1] == Decimal("90.00")
 
 
 async def test_publish_reconnects_when_connection_is_closed(monkeypatch):
@@ -259,7 +259,7 @@ def services_on(log):
     return (
         ProductService(products, FakeCache(), log),
         UserService(users, orders, FakeCache(), log),
-        OrderService(orders, users, products, FakeCache(), log),
+        OrderService(orders, users, products, FakeCache(), log, FakePayments()),
     )
 
 
@@ -272,16 +272,19 @@ def services_on(log):
         UserCreate(name="New", email="new@test.com", age=20, password="abc12345"))),
     (["user.updated"], lambda p, u, o: u.update_user(1, UserUpdatePatch(name="Changed"))),
     (["user.deleted"], lambda p, u, o: u.delete_user(1)),
-    (["order.created", "order.paid"], lambda p, u, o: o.create_order(
+    (["order.created", None, "order.paid"], lambda p, u, o: o.create_order(
         1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]))),
-    (["order.deleted"], lambda p, u, o: o.delete_order(7)),
+    ([None, "order.deleted"], lambda p, u, o: o.delete_order(7)),
 ])
 async def test_event_is_published_only_after_commit(routing_keys, operation):
     log = TransactionLog()
 
     await operation(*services_on(log))
 
-    assert log.entries == [entry for key in routing_keys for entry in ("begin", "commit", f"publish {key}")]
+    expected = []
+    for key in routing_keys:
+        expected += ["begin", "commit"] + ([f"publish {key}"] if key else [])
+    assert log.entries == expected
 
 
 @pytest.mark.parametrize("connection, should_close", [

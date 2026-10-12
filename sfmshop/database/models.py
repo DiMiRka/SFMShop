@@ -20,7 +20,6 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(Text, nullable=False, server_default='password')
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     age: Mapped[int] = mapped_column(Integer, CheckConstraint("age >= 18", name="check_user_age"), nullable=False)
-    balance: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), default=0.0)
     is_active: Mapped[bool] = mapped_column(default=True)
     is_admin: Mapped[bool] = mapped_column(default=False, server_default=false(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -55,6 +54,7 @@ class Order(Base):
         default=OrderStatus.PENDING,
         server_default=OrderStatus.PENDING.value,
     )
+    payment_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="orders", passive_deletes=True)
