@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from sfmshop.core.actor import Actor
 from sfmshop.repositories import OrderRepository, UserRepository, ProductRepository
 from sfmshop.services.cache_service import CacheService
 from sfmshop.services.queue_producer import QueueProducer
@@ -70,7 +71,7 @@ class OrderService:
 
         return order_data
 
-    async def create_order(self, user_id: int, order: OrderCreate) -> dict:
+    async def create_order(self, user_id: int, order: OrderCreate, *, actor: Actor) -> dict:
         if not order.items:
             raise ValidationError("Empty order")
 
@@ -132,16 +133,16 @@ class OrderService:
         ORDERS_CREATED.inc()
 
         await self.queue.publish_event("order_exchange", "order.created",
-                                       self._event(order_db_id, user_id, product_ids))
+                                       self._event(order_db_id, user_id, product_ids, actor))
 
         try:
-            return await self.pay_order(order_db_id, user_id)
+            return await self.pay_order(order_db_id, user_id, actor=actor)
         except PaymentUnavailableError:
             logger.warning(f"Order id={order_db_id} stays pending: payment service unavailable")
             async with self.order_rep.db.begin():
                 return self._to_response(await self._get_for_update(order_db_id, user_id))
 
-    async def pay_order(self, order_id: int, user_id: int | None) -> dict:
+    async def pay_order(self, order_id: int, user_id: int | None, *, actor: Actor) -> dict:
         async with self.order_rep.db.begin():
             order = await self._get_for_update(order_id, user_id)
             ensure_transition(order.status, OrderStatus.PAID)
@@ -175,11 +176,11 @@ class OrderService:
 
         routing_key = "order.paid" if paid else "order.payment_failed"
         await self.queue.publish_event("order_exchange", routing_key,
-                                       self._event(order_id, owner_id, self._product_ids(latest)))
+                                       self._event(order_id, owner_id, self._product_ids(latest), actor))
 
         return result
 
-    async def cancel_order(self, order_id: int, user_id: int | None) -> dict:
+    async def cancel_order(self, order_id: int, user_id: int | None, *, actor: Actor) -> dict:
         async with self.order_rep.db.begin():
             order = await self._get_for_update(order_id, user_id)
             ensure_transition(order.status, OrderStatus.CANCELLED)
@@ -190,11 +191,11 @@ class OrderService:
             result = self._to_response(order)
 
         await self.queue.publish_event("order_exchange", "order.cancelled",
-                                       self._event(order_id, order.user_id, self._product_ids(order)))
+                                       self._event(order_id, order.user_id, self._product_ids(order), actor))
 
         return result
 
-    async def delete_order(self, order_id: int):
+    async def delete_order(self, order_id: int, *, actor: Actor):
         async with self.order_rep.db.begin():
             order = await self._get_for_update(order_id, None)
             seen_status, owner_id, payment_id = order.status, order.user_id, order.payment_id
@@ -216,7 +217,7 @@ class OrderService:
             await self.order_rep.delete(order)
 
         await self.queue.publish_event("order_exchange", "order.deleted",
-                                       self._event(order_id, owner_id, product_ids))
+                                       self._event(order_id, owner_id, product_ids, actor))
 
         return {"id": order_id, "message": "Заказ удален"}
 
@@ -248,8 +249,8 @@ class OrderService:
         return [item.product_id for item in order.items]
 
     @staticmethod
-    def _event(order_id: int, user_id: int, product_ids: list[int]) -> dict:
-        return {"order_ids": order_id, "user_ids": user_id, "product_ids": product_ids}
+    def _event(order_id: int, user_id: int, product_ids: list[int], actor: Actor) -> dict:
+        return {"order_ids": order_id, "user_ids": user_id, "product_ids": product_ids, **actor.event_fields()}
 
     @staticmethod
     def _to_response(order: Order) -> dict:

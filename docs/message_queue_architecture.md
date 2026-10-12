@@ -28,10 +28,16 @@ POST /v1/orders → OrderService → commit заказа → publish order.creat
 | `product_exchange` | `product.created`, `product.updated`, `product.deleted` | `ProductService` | `product_ids` |
 | `product_exchange` | `review.created`, `review.updated`, `review.deleted` | `ReviewService` | `review_ids`, `product_ids`, `user_ids` |
 | `user_exchange` | `user.created`, `user.updated`, `user.deleted` | `UserService` | `user_ids`; при удалении ещё `order_ids` и `product_ids` |
+| `user_exchange` | `user.balance_topped_up` | `WalletService` | `user_ids`, `amount` (строкой с копейками) |
 | `order_exchange` | `order.created`, `order.paid`, `order.payment_failed`, `order.cancelled`, `order.deleted` | `OrderService` | `order_ids`, `user_ids`, `product_ids` |
 
+Во всех событиях есть `actor_id` и `actor_role` (`user` или `admin`), кто выполнил действие\
+Сервис получает актора из роутера явным параметром `actor`, поэтому забыть его нельзя (вызов без него не пройдёт)\
+При регистрации актор это сам новый пользователь\
 Сообщения отправляются с `delivery_mode=PERSISTENT` и переживают перезапуск брокера\
-У каждого сообщения есть `message_id` и `timestamp`; при повторах публикации они не меняются, поэтому консьюмер журнала не записывает событие дважды
+У каждого сообщения есть `message_id` и `timestamp`, при повторах публикации они не меняются, поэтому консьюмер журнала не записывает событие дважды\
+У пополнения `message_id` строится из ключа идемпотентности (`top-up-{user_id}-{key}`),
+повтор того же пополнения не создаёт вторую запись в журнале
 
 ## Очереди
 

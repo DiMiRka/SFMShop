@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from sfmshop.core.actor import Actor
 from sfmshop.core.exceptions import ValidationError
 from sfmshop.core.order_status import OrderStatus
 from sfmshop.schemas import OrderCreate, OrderItemBase
@@ -12,6 +13,8 @@ from sfmshop.services.order_service import OrderService
 
 
 pytestmark = pytest.mark.anyio
+
+ACTOR = Actor(1, "user")
 
 
 class BeginContext:
@@ -61,7 +64,7 @@ async def test_order_service_create_order_happy_path_with_mocks():
     service, order_rep, user_rep, product_rep, queue = build_service()
     order = OrderCreate(items=[OrderItemBase(product_id=2, quantity=1)])
 
-    result = await service.create_order(1, order)
+    result = await service.create_order(1, order, actor=ACTOR)
 
     assert result["id"] == 42
     assert result["status"] == "paid"
@@ -80,7 +83,7 @@ async def test_order_service_empty_order_raises_and_dependencies_not_called():
     order = OrderCreate(items=[])
 
     with pytest.raises(ValidationError):
-        await service.create_order(1, order)
+        await service.create_order(1, order, actor=ACTOR)
 
     user_rep.get_by_id.assert_not_awaited()
     product_rep.get_by_ids_for_update.assert_not_awaited()
@@ -94,7 +97,7 @@ async def test_order_service_db_failure_does_not_send_notification():
     order = OrderCreate(items=[OrderItemBase(product_id=2, quantity=1)])
 
     with pytest.raises(RuntimeError, match="DB error"):
-        await service.create_order(1, order)
+        await service.create_order(1, order, actor=ACTOR)
 
     order_rep.create.assert_awaited_once()
     queue.publish_event.assert_not_awaited()

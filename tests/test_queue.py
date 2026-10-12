@@ -14,7 +14,7 @@ from sfmshop.services.product_service import ProductService
 from sfmshop.services.queue_consumer import QueueConsumer
 from sfmshop.services.queue_producer import QueueProducer
 from sfmshop.services.user_service import UserService
-from tests.test_services import FakeCache, FakePayments, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
+from tests.test_services import ACTOR, FakeCache, FakePayments, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
 
 
 pytestmark = pytest.mark.anyio
@@ -64,7 +64,7 @@ async def deliver(consumer, queue):
 async def test_user_update_event_invalidates_that_users_cache():
     queue = FakeQueue()
     users = UserRepoFake()
-    await UserService(users, OrderRepoFake(), FakeCache(), queue).update_user(1, UserUpdatePatch(name="New"))
+    await UserService(users, OrderRepoFake(), FakeCache(), queue).update_user(1, UserUpdatePatch(name="New"), actor=ACTOR)
     consumer, cache = build_consumer()
 
     assert await deliver(consumer, queue) == "user.updated"
@@ -75,7 +75,7 @@ async def test_user_update_event_invalidates_that_users_cache():
 
 async def test_user_delete_event_invalidates_users_orders_and_products():
     queue = FakeQueue()
-    await UserService(UserRepoFake(), OrderRepoFake(), FakeCache(), queue).delete_user(1)
+    await UserService(UserRepoFake(), OrderRepoFake(), FakeCache(), queue).delete_user(1, actor=ACTOR)
     consumer, cache = build_consumer()
 
     assert await deliver(consumer, queue) == "user.deleted"
@@ -89,7 +89,7 @@ async def test_order_paid_event_invalidates_buyer_order_and_products():
     queue = FakeQueue()
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
     await OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), queue,
-                       FakePayments()).create_order(1, order)
+                       FakePayments()).create_order(1, order, actor=ACTOR)
     consumer, cache = build_consumer()
 
     assert await deliver(consumer, queue) == "order.paid"
@@ -101,7 +101,7 @@ async def test_order_paid_event_invalidates_buyer_order_and_products():
 
 async def test_product_update_event_invalidates_that_product():
     queue = FakeQueue()
-    await ProductService(ProductRepoFake(), FakeCache(), queue).update_product(1, ProductUpdate(price=Decimal("5.00")))
+    await ProductService(ProductRepoFake(), FakeCache(), queue).update_product(1, ProductUpdate(price=Decimal("5.00")), actor=ACTOR)
     consumer, cache = build_consumer()
 
     assert await deliver(consumer, queue) == "product.updated"
@@ -136,7 +136,7 @@ async def test_notification_takes_order_id_from_order_paid_event():
     queue = FakeQueue()
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
     await OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), queue,
-                       FakePayments()).create_order(1, order)
+                       FakePayments()).create_order(1, order, actor=ACTOR)
     consumer, _ = build_consumer()
     consumer.notifier = SimpleNamespace(order_paid=AsyncMock())
     _, routing_key, payload = queue.events[-1]
@@ -215,7 +215,7 @@ async def test_order_is_created_when_rabbitmq_is_down(monkeypatch):
     service = OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), producer, payments)
     order = OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])
 
-    created = await service.create_order(1, order)
+    created = await service.create_order(1, order, actor=ACTOR)
 
     assert created["id"] == 77
     assert created["status"] == "paid"
@@ -260,7 +260,7 @@ class TransactionLog:
 
         return Transaction()
 
-    async def publish_event(self, exchange, routing_key, message):
+    async def publish_event(self, exchange, routing_key, message, message_id=None):
         self.entries.append(f"publish {routing_key}")
         return True
 
@@ -278,16 +278,16 @@ def services_on(log):
 
 @pytest.mark.parametrize("routing_keys, operation", [
     (["product.created"], lambda p, u, o: p.create_product(
-        ProductCreate(name="Desk", price=Decimal("10.00"), quantity=1))),
-    (["product.updated"], lambda p, u, o: p.update_product(1, ProductUpdate(quantity=2))),
-    (["product.deleted"], lambda p, u, o: p.delete_product(1)),
+        ProductCreate(name="Desk", price=Decimal("10.00"), quantity=1), actor=ACTOR)),
+    (["product.updated"], lambda p, u, o: p.update_product(1, ProductUpdate(quantity=2), actor=ACTOR)),
+    (["product.deleted"], lambda p, u, o: p.delete_product(1, actor=ACTOR)),
     (["user.created"], lambda p, u, o: u.register_user(
         UserCreate(name="New", email="new@test.com", age=20, password="abc12345"))),
-    (["user.updated"], lambda p, u, o: u.update_user(1, UserUpdatePatch(name="Changed"))),
-    (["user.deleted"], lambda p, u, o: u.delete_user(1)),
+    (["user.updated"], lambda p, u, o: u.update_user(1, UserUpdatePatch(name="Changed"), actor=ACTOR)),
+    (["user.deleted"], lambda p, u, o: u.delete_user(1, actor=ACTOR)),
     (["order.created", None, "order.paid"], lambda p, u, o: o.create_order(
-        1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]))),
-    ([None, "order.deleted"], lambda p, u, o: o.delete_order(7)),
+        1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]), actor=ACTOR)),
+    ([None, "order.deleted"], lambda p, u, o: o.delete_order(7, actor=ACTOR)),
 ])
 async def test_event_is_published_only_after_commit(routing_keys, operation):
     log = TransactionLog()

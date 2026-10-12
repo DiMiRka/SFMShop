@@ -10,6 +10,7 @@ from sfmshop.core.exceptions import PaymentUnavailableError, ForbiddenError, Not
 from sfmshop.database.models import Product as DbProduct, User as DbUser
 from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 from sfmshop.core.security import get_password_hash, verify_password
+from sfmshop.core.actor import Actor
 from sfmshop.services.order_service import OrderService
 from sfmshop.services.product_service import ProductService
 from sfmshop.services.user_service import UserService
@@ -17,6 +18,8 @@ from sfmshop.clients.payment_client import PaymentResult, PaymentStatus
 
 
 pytestmark = pytest.mark.anyio
+
+ACTOR = Actor(1, "user")
 
 
 class BeginContext:
@@ -83,9 +86,11 @@ class FakePayments:
 class FakeQueue:
     def __init__(self):
         self.events = []
+        self.message_ids = []
 
-    async def publish_event(self, exchange, routing_key, message):
+    async def publish_event(self, exchange, routing_key, message, message_id=None):
         self.events.append((exchange, routing_key, message))
+        self.message_ids.append(message_id)
         return True
 
 
@@ -242,24 +247,24 @@ async def test_product_service_success_and_not_found():
     assert all_products["total"] == 1
     assert all_products["products"][0]["id"] == 1
     assert (await service.get_product_by_id(1))["name"] == "Mouse"
-    assert await service.create_product(ProductCreate(name="New", price=Decimal("1.00"), quantity=1)) == {
+    assert await service.create_product(ProductCreate(name="New", price=Decimal("1.00"), quantity=1), actor=ACTOR) == {
         "id": 44,
         "message": "Товар добавлен",
     }
-    assert await service.update_product(1, ProductUpdate(quantity=4)) == {
+    assert await service.update_product(1, ProductUpdate(quantity=4), actor=ACTOR) == {
         "id": 1,
         "message": "Товар обновлен",
     }
     assert repo.updated[1] == {"quantity": 4}
-    assert await service.delete_product(1) == {"id": 1, "message": "Товар удален"}
+    assert await service.delete_product(1, actor=ACTOR) == {"id": 1, "message": "Товар удален"}
     assert queue.events[-1][1] == "product.deleted"
 
     with pytest.raises(NotFoundError):
         await service.get_product_by_id(999)
     with pytest.raises(NotFoundError):
-        await service.update_product(999, ProductUpdate(quantity=2))
+        await service.update_product(999, ProductUpdate(quantity=2), actor=ACTOR)
     with pytest.raises(NotFoundError):
-        await service.delete_product(999)
+        await service.delete_product(999, actor=ACTOR)
 
 
 async def test_user_service_success_auth_and_not_found():
@@ -296,19 +301,19 @@ async def test_user_service_success_auth_and_not_found():
     with pytest.raises(UnauthorizedError):
         await service.create_access_token_db("bad")
 
-    assert await service.update_user(1, UserUpdatePatch(name="Updated")) == {
+    assert await service.update_user(1, UserUpdatePatch(name="Updated"), actor=ACTOR) == {
         "id": 1,
         "message": "Пользователь обновлен",
     }
-    assert await service.delete_user(1) == {"id": 1, "message": " Пользователь удален"}
+    assert await service.delete_user(1, actor=ACTOR) == {"id": 1, "message": " Пользователь удален"}
     assert (await service.get_user_orders(1))[0]["id"] == 7
 
     with pytest.raises(NotFoundError):
         await service.get_user_by_id(999)
     with pytest.raises(NotFoundError):
-        await service.update_user(999, UserUpdatePatch(name="Nope"))
+        await service.update_user(999, UserUpdatePatch(name="Nope"), actor=ACTOR)
     with pytest.raises(NotFoundError):
-        await service.delete_user(999)
+        await service.delete_user(999, actor=ACTOR)
 
 
 async def test_user_service_password_change_is_hashed_and_usable_for_login():
@@ -316,7 +321,7 @@ async def test_user_service_password_change_is_hashed_and_usable_for_login():
     service = UserService(users, OrderRepoFake(), FakeCache(), FakeQueue())
     users.email_user = users.user
 
-    await service.update_user(1, UserUpdatePatch(password="newpass42", current_password="oldpass42"))
+    await service.update_user(1, UserUpdatePatch(password="newpass42", current_password="oldpass42"), actor=ACTOR)
 
     _, data = users.updated
     assert "password" not in data
@@ -365,7 +370,7 @@ async def test_order_service_success_and_error_paths():
     assert (await service.get_order_by_id(7, 1))["id"] == 7
 
     order_create = OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)])
-    created = await service.create_order(1, order_create)
+    created = await service.create_order(1, order_create, actor=ACTOR)
     assert created == {
         "id": 77,
         "user_id": 1,
@@ -380,7 +385,7 @@ async def test_order_service_success_and_error_paths():
     assert orders.created_items[0]["order_id"] == 77
     assert [event[1] for event in queue.events] == ["order.created", "order.paid"]
 
-    deleted = await service.delete_order(7)
+    deleted = await service.delete_order(7, actor=ACTOR)
     assert deleted["id"] == 7
     assert queue.events[-1][1] == "order.deleted"
 
@@ -392,28 +397,28 @@ async def test_order_service_success_and_error_paths():
     with pytest.raises(NotFoundError):
         await service.get_order_by_id(999, 1)
     with pytest.raises(ValidationError):
-        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=0)]))
+        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=0)]), actor=ACTOR)
     with pytest.raises(NotFoundError):
-        await service.delete_order(999)
+        await service.delete_order(999, actor=ACTOR)
 
     users.user = None
     with pytest.raises(NotFoundError):
-        await service.create_order(1, order_create)
+        await service.create_order(1, order_create, actor=ACTOR)
 
 
 async def test_order_stays_pending_when_payment_service_is_unavailable():
     orders, products, queue = OrderRepoFake(), ProductRepoFake(), FakeQueue()
     service = OrderService(orders, UserRepoFake(), products, FakeCache(), queue, payments=None)
 
-    created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
+    created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]), actor=ACTOR)
 
     assert created["status"] == "pending"
     assert products.product.quantity == 3
     assert [event[1] for event in queue.events] == ["order.created"]
     with pytest.raises(PaymentUnavailableError):
-        await service.pay_order(77, 1)
+        await service.pay_order(77, 1, actor=ACTOR)
     with pytest.raises(PaymentUnavailableError):
-        await service.delete_order(7)
+        await service.delete_order(7, actor=ACTOR)
     assert orders.deleted is None
 
 
@@ -431,9 +436,9 @@ async def test_order_service_hides_foreign_orders():
     assert await service.get_all_orders(stranger_id) == []
 
     with pytest.raises(NotFoundError):
-        await service.pay_order(7, stranger_id)
+        await service.pay_order(7, stranger_id, actor=ACTOR)
     with pytest.raises(NotFoundError):
-        await service.cancel_order(7, stranger_id)
+        await service.cancel_order(7, stranger_id, actor=ACTOR)
     assert orders.order.status == OrderStatus.PAID
     assert orders.deleted is None
     assert users.updated is None
@@ -457,7 +462,7 @@ async def test_order_service_admin_manages_any_order():
     assert ("orders:all:100:0", 900) in cache.calls
     assert (await service.get_order_by_id(7, all_users))["user_id"] == 1
 
-    await service.delete_order(7)
+    await service.delete_order(7, actor=ACTOR)
     assert orders.deleted is orders.order
     assert payments.refunds == [500]
     assert payments.balances[1] == Decimal("120.00")
@@ -472,14 +477,14 @@ async def test_order_service_stock_balance_and_product_errors():
     service = OrderService(orders, users, products, FakeCache(), FakeQueue(), payments)
 
     with pytest.raises(NotFoundError):
-        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=999, quantity=1)]))
+        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=999, quantity=1)]), actor=ACTOR)
 
     products.product.quantity = 1
     with pytest.raises(Exception):
-        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
+        await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]), actor=ACTOR)
 
     products.product.quantity = 5
-    created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
+    created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]), actor=ACTOR)
     assert created["status"] == "failed"
     assert payments.balances[1] == Decimal("1.00")
     assert products.product.quantity == 3
@@ -500,7 +505,7 @@ async def test_paid_order_refund_with_kopecks_and_locked_stock_return():
     products.get_by_ids_for_update = lambda ids: async_return([p for p in products.products if p.id in ids])
     service = OrderService(orders, users, products, FakeCache(), FakeQueue(), payments)
 
-    await service.delete_order(7)
+    await service.delete_order(7, actor=ACTOR)
 
     assert payments.refunds == [500]
     assert payments.balances[1] == Decimal("120.75")

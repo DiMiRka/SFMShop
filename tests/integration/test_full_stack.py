@@ -156,6 +156,7 @@ def test_order_charges_balance_reduces_stock_and_lands_in_event_log(client, admi
 
     [event] = eventually(logged)
     assert event["user_ids"] == [user["id"]] and event["product_ids"] == [product_id]
+    assert (event["actor_id"], event["actor_role"]) == (user["id"], "user")
 
     def delivered():
         messages = httpx.get(f"{MAILPIT_URL}/api/v1/messages", params={"limit": 50}).json()["messages"]
@@ -232,6 +233,16 @@ def test_wallet_lives_in_payment_service_and_admin_delete_refunds(client, admin,
 
     assert Decimal(top_up(client, admin, user["id"], "100.00", key)) == start + 100
     assert Decimal(top_up(client, admin, user["id"], "100.00", key)) == start + 100
+
+    def top_up_logged():
+        events = client.get("/v1/events/", params={"event": "user.balance_topped_up", "user_id": user["id"]},
+                            headers=admin)
+        assert events.status_code == 200, events.text
+        return [e for e in events.json() if e["id"] == f"top-up-{user['id']}-{key}"]
+
+    [top_up_event] = eventually(top_up_logged)
+    assert top_up_event["actor_role"] == "admin" and top_up_event["actor_id"] != user["id"]
+    assert top_up_event["payload"]["amount"] == "100.00"
 
     product_id = create_product(client, admin, price="30.00", quantity=5)
     order = client.post("/v1/orders/", json={"items": [{"product_id": product_id, "quantity": 2}]}, headers=headers)

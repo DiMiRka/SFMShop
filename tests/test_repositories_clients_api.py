@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from sfmshop.api.v1.auth import login, refresh_token, register
+from sfmshop.core.actor import Actor
 from sfmshop.api.v1.orders import cancel_order, delete_order, get_order, get_orders, pay_order, post_order
 from sfmshop.api.v1.products import delete_product, get_product, get_products, post_product, put_product
 from sfmshop.api.v1.users import delete_user, get_user, get_user_orders, get_users, put_user
@@ -124,20 +125,26 @@ async def test_api_route_functions_delegate_to_services():
     class Service:
         async def get_all_products(self, limit, offset): return ("products", limit, offset)
         async def get_product_by_id(self, product_id): return ("product", product_id)
-        async def create_product(self, product): return product.name
-        async def update_product(self, product_id, product): return (product_id, product.quantity)
-        async def delete_product(self, product_id): return product_id
+        actors: list = []
+
+        def record(self, actor, result):
+            self.actors.append(actor)
+            return result
+
+        async def create_product(self, product, *, actor): return self.record(actor, product.name)
+        async def update_product(self, product_id, product, *, actor): return self.record(actor, (product_id, product.quantity))
+        async def delete_product(self, product_id, *, actor): return self.record(actor, product_id)
         async def get_users(self, limit, offset): return ("users", limit, offset)
         async def get_user_by_id(self, user_id): return ("user", user_id)
-        async def update_user(self, user_id, user): return (user_id, user.name)
-        async def delete_user(self, user_id): return user_id
+        async def update_user(self, user_id, user, *, actor): return self.record(actor, (user_id, user.name))
+        async def delete_user(self, user_id, *, actor): return self.record(actor, user_id)
         async def get_user_orders(self, user_id): return ("orders", user_id)
         async def get_all_orders(self, user_id, limit, offset): return ("orders", user_id, limit, offset)
         async def get_order_by_id(self, order_id, user_id): return ("order", order_id, user_id)
-        async def create_order(self, user_id, order): return (user_id, len(order.items))
-        async def pay_order(self, order_id, user_id): return ("pay", order_id, user_id)
-        async def cancel_order(self, order_id, user_id): return ("cancel", order_id, user_id)
-        async def delete_order(self, order_id): return order_id
+        async def create_order(self, user_id, order, *, actor): return self.record(actor, (user_id, len(order.items)))
+        async def pay_order(self, order_id, user_id, *, actor): return self.record(actor, ("pay", order_id, user_id))
+        async def cancel_order(self, order_id, user_id, *, actor): return self.record(actor, ("cancel", order_id, user_id))
+        async def delete_order(self, order_id, *, actor): return self.record(actor, order_id)
         async def register_user(self, user): return user.email
         async def authorized_user(self, form_data): return form_data.username
         async def create_access_token_db(self, token): return token
@@ -171,6 +178,7 @@ async def test_api_route_functions_delegate_to_services():
     assert await get_order(admin, service, 1) == ("order", 1, None)
     assert await cancel_order(admin, service, 1) == ("cancel", 1, None)
     assert await delete_order(admin, service, 1) == 1
+    assert service.actors == [Actor(1, "user")] * 8 + [Actor(9, "admin")] * 2
 
     user = UserCreate(name="A", email="a@test.com", age=18, password="abc12345")
     assert await register(service, user) == "a@test.com"

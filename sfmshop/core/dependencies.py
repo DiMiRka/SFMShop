@@ -234,8 +234,11 @@ order_write_service = Annotated[OrderService, Depends(get_order_write_service)]
 order_read_service = Annotated[OrderService, Depends(get_order_read_service)]
 
 
-async def get_wallet_service(u_rep: u_rep_write_dependency, payments: payment_client_dependency) -> WalletService:
-    return WalletService(u_rep, payments)
+async def get_wallet_service(
+        u_rep: u_rep_write_dependency,
+        payments: payment_client_dependency,
+        queue: queue_dependency) -> WalletService:
+    return WalletService(u_rep, payments, queue)
 
 
 wallet_service = Annotated[WalletService, Depends(get_wallet_service)]

@@ -17,7 +17,7 @@ from sfmshop.services.cache_service import CacheService
 from sfmshop.services.order_service import OrderService
 from tests.test_assistant_service import ScriptedLLM, call, final, make_service
 from tests.test_queue import build_producer
-from tests.test_services import FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
+from tests.test_services import ACTOR, FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
 from tests.test_unit_core import FlakyRedis, MemoryRedis
 
 
@@ -119,7 +119,7 @@ async def test_created_orders_are_counted():
     before = sample("sfmshop_orders_created_total")
     service = OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), FakeQueue())
 
-    await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]))
+    await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]), actor=ACTOR)
 
     assert sample("sfmshop_orders_created_total") == before + 1
 

@@ -1,6 +1,7 @@
 from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
 
+from sfmshop.core.actor import Actor
 from sfmshop.repositories import UserRepository, OrderRepository
 from sfmshop.services.cache_service import CacheService
 from sfmshop.services.queue_producer import QueueProducer
@@ -67,7 +68,7 @@ class UserService:
         await self.queue.publish_event(
                 "user_exchange",
                 "user.created",
-                {"user_ids": new_user_db.id}
+                {"user_ids": new_user_db.id, **Actor(new_user_db.id, "user").event_fields()}
             )
 
         return UserResponse.model_validate(new_user_db).model_dump(mode="json")
@@ -115,7 +116,7 @@ class UserService:
             "token_type": "bearer"
         }
 
-    async def update_user(self, user_id: int, user_update: UserUpdatePatch):
+    async def update_user(self, user_id: int, user_update: UserUpdatePatch, *, actor: Actor):
         async with self.user_rep.db.begin():
             user_db = await self.user_rep.get_by_id(user_id)
 
@@ -133,12 +134,12 @@ class UserService:
         await self.queue.publish_event(
                 "user_exchange",
                 "user.updated",
-                {"user_ids": user_id}
+                {"user_ids": user_id, **actor.event_fields()}
             )
 
         return {"id": user_id, "message": "Пользователь обновлен"}
 
-    async def delete_user(self, user_id: int):
+    async def delete_user(self, user_id: int, *, actor: Actor):
         async with self.user_rep.db.begin():
             user_db = await self.user_rep.get_by_id_for_update(user_id)
 
@@ -157,7 +158,8 @@ class UserService:
             {
                 "order_ids": order_ids,
                 "user_ids": user_id,
-                "product_ids": product_ids
+                "product_ids": product_ids,
+                **actor.event_fields(),
             }
         )
 

@@ -14,6 +14,7 @@ ALL_EVENTS = (
     ("user_exchange", "user.created"),
     ("user_exchange", "user.updated"),
     ("user_exchange", "user.deleted"),
+    ("user_exchange", "user.balance_topped_up"),
     ("product_exchange", "product.created"),
     ("product_exchange", "product.updated"),
     ("product_exchange", "product.deleted"),

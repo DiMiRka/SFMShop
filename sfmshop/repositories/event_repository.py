@@ -18,7 +18,7 @@ class EventRepository:
             [("occurred_at", DESCENDING)], name="occurred_at_ttl", expireAfterSeconds=ttl_days * 86400,
         )
         await self.collection.create_index([("event", ASCENDING), ("occurred_at", DESCENDING)])
-        for field in ENTITY_FIELDS.values():
+        for field in (*ENTITY_FIELDS.values(), "actor_id"):
             await self.collection.create_index([(field, ASCENDING), ("occurred_at", DESCENDING)])
 
     async def add(self, event: dict[str, Any]) -> None:
@@ -33,6 +33,8 @@ class EventRepository:
             value = getattr(filters, filter_name)
             if value is not None:
                 query[field] = value
+        if filters.actor_id is not None:
+            query["actor_id"] = filters.actor_id
         if filters.before is not None:
             query["occurred_at"] = {"$lt": filters.before}
 

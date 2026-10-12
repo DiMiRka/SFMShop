@@ -10,7 +10,7 @@ from sfmshop.core.exceptions import InvalidOrderStatusError
 from sfmshop.core.order_status import OrderStatus, ensure_transition
 from sfmshop.schemas import OrderCreate, OrderItemBase
 from sfmshop.services.order_service import OrderService
-from tests.test_services import FakeCache, FakePayments, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
+from tests.test_services import ACTOR, FakeCache, FakePayments, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
 
 
 pytestmark = pytest.mark.anyio
@@ -49,27 +49,27 @@ def routing_keys(queue):
 async def test_failed_payment_can_be_retried_after_top_up():
     service, orders, payments, products, queue = build(balance="5.00")
 
-    created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]))
+    created = await service.create_order(1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=2)]), actor=ACTOR)
 
     assert created["status"] == "failed"
     assert payments.balances[1] == Decimal("5.00")
     assert products.product.quantity == 3
 
     payments.balances[1] = Decimal("25.00")
-    paid = await service.pay_order(77, 1)
+    paid = await service.pay_order(77, 1, actor=ACTOR)
 
     assert paid["status"] == "paid"
     assert payments.balances[1] == Decimal("5.00")
     assert orders.orders[77].payment_id == 502
     assert routing_keys(queue) == ["order.created", "order.payment_failed", "order.paid"]
-    assert queue.events[-1][2] == {"order_ids": 77, "user_ids": 1, "product_ids": [1]}
+    assert queue.events[-1][2] == {"order_ids": 77, "user_ids": 1, "product_ids": [1], "actor_id": 1, "actor_role": "user"}
 
 
 async def test_paid_order_cannot_be_paid_again():
     service, orders, payments, _, queue = build()
 
     with pytest.raises(InvalidOrderStatusError, match="оплатить"):
-        await service.pay_order(7, 1)
+        await service.pay_order(7, 1, actor=ACTOR)
 
     assert payments.balances[1] == Decimal("100.00")
     assert len(payments.payments) == 1
@@ -81,17 +81,18 @@ async def test_unpaid_order_cancel_returns_stock_once(status):
     service, orders, payments, products, queue = build()
     orders.order.status = status
 
-    cancelled = await service.cancel_order(7, 1)
+    cancelled = await service.cancel_order(7, 1, actor=ACTOR)
 
     assert cancelled["status"] == "cancelled"
     assert products.product.quantity == 7
     assert payments.balances[1] == Decimal("100.00")
-    assert queue.events == [("order_exchange", "order.cancelled", {"order_ids": 7, "user_ids": 1, "product_ids": [1]})]
+    assert queue.events == [("order_exchange", "order.cancelled", {"order_ids": 7, "user_ids": 1, "product_ids": [1],
+                                                                    "actor_id": 1, "actor_role": "user"})]
 
     with pytest.raises(InvalidOrderStatusError):
-        await service.cancel_order(7, 1)
+        await service.cancel_order(7, 1, actor=ACTOR)
     with pytest.raises(InvalidOrderStatusError):
-        await service.pay_order(7, 1)
+        await service.pay_order(7, 1, actor=ACTOR)
     assert products.product.quantity == 7
 
 
@@ -99,7 +100,7 @@ async def test_paid_order_cannot_be_cancelled():
     service, orders, _, products, queue = build()
 
     with pytest.raises(InvalidOrderStatusError, match="отменить"):
-        await service.cancel_order(7, 1)
+        await service.cancel_order(7, 1, actor=ACTOR)
 
     assert orders.order.status == OrderStatus.PAID
     assert products.product.quantity == 5
@@ -114,7 +115,7 @@ async def test_admin_delete_refunds_only_paid_and_returns_stock_only_if_reserved
     service, orders, payments, products, _ = build()
     orders.order.status = status
 
-    await service.delete_order(7)
+    await service.delete_order(7, actor=ACTOR)
 
     assert orders.deleted is orders.order
     assert payments.refunds == [] and payments.top_ups == {}
@@ -169,7 +170,7 @@ async def test_money_is_refunded_when_order_changes_during_payment(change):
     service = OrderService(orders, UserRepoFake(), products, FakeCache(), queue, payments)
 
     with pytest.raises(InvalidOrderStatusError, match="изменился"):
-        await service.pay_order(7, 1)
+        await service.pay_order(7, 1, actor=ACTOR)
 
     assert payments.refunds == [500]
     assert payments.balances[1] == Decimal("100.00")
@@ -187,7 +188,7 @@ async def test_payment_already_recorded_by_parallel_request_is_returned_without_
     payments = ChangingPayments(parallel_request_recorded_it)
     service = OrderService(orders, UserRepoFake(), ProductRepoFake(), FakeCache(), queue, payments)
 
-    result = await service.pay_order(7, 1)
+    result = await service.pay_order(7, 1, actor=ACTOR)
 
     assert result["status"] == "paid"
     assert payments.refunds == []
@@ -207,7 +208,7 @@ async def test_failed_payment_is_not_refunded_when_order_changes():
     service = OrderService(orders, UserRepoFake(), ProductRepoFake(), FakeCache(), FakeQueue(), payments)
 
     with pytest.raises(InvalidOrderStatusError):
-        await service.pay_order(7, 1)
+        await service.pay_order(7, 1, actor=ACTOR)
 
     assert payments.refunds == []
 
@@ -223,7 +224,7 @@ async def test_delete_is_aborted_when_order_changes_after_refund():
     payments.refund = refund_then_change
 
     with pytest.raises(InvalidOrderStatusError, match="изменился"):
-        await service.delete_order(7)
+        await service.delete_order(7, actor=ACTOR)
 
     assert orders.deleted is None
     assert products.product.quantity == 5

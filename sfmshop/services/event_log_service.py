@@ -30,6 +30,8 @@ def build_event(
         "product_ids": to_ids(payload.get("product_ids")),
         "user_ids": to_ids(payload.get("user_ids")),
         "order_ids": to_ids(payload.get("order_ids")),
+        "actor_id": payload.get("actor_id"),
+        "actor_role": payload.get("actor_role"),
         "payload": payload,
     }
 

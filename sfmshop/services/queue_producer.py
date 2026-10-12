@@ -81,11 +81,11 @@ class QueueProducer:
         await self._ensure_connection()
         return self.connection is not None and not self.connection.is_closed
 
-    async def publish_event(self, exchange: str, routing_key: str, message: dict) -> bool:
+    async def publish_event(self, exchange: str, routing_key: str, message: dict, message_id: str | None = None) -> bool:
         if exchange not in EXCHANGES:
             raise ValueError(f"Exchange {exchange} not found")
 
-        message_id = uuid4().hex
+        message_id = message_id or uuid4().hex
         occurred_at = datetime.now(timezone.utc)
 
         for attempt in range(self.max_retries):

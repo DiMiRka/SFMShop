@@ -88,8 +88,8 @@ async def test_dependency_factories_and_current_user(monkeypatch):
     order_service = await deps.get_order_write_service("order-rep", "user-rep", "product-rep", "cache", "queue",
                                                        "payments")
     assert order_service.order_rep == "order-rep" and order_service.payments == "payments"
-    wallet_service = await deps.get_wallet_service("user-rep", None)
-    assert wallet_service.user_rep == "user-rep" and wallet_service.payments is None
+    wallet_service = await deps.get_wallet_service("user-rep", None, "queue")
+    assert wallet_service.user_rep == "user-rep" and wallet_service.payments is None and wallet_service.queue == "queue"
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
     assert deps.get_payment_client(request) is None
     request.app.state.payment_client = "client"

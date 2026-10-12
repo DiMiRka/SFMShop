@@ -12,8 +12,9 @@ from sfmshop.api.main import sfmshop_app as app
 from sfmshop.core import dependencies
 from sfmshop.core.exceptions import EventLogUnavailableError
 from sfmshop.repositories.event_repository import EventRepository
-from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, UserCreate
-from sfmshop.schemas.events import EventFilter
+from sfmshop.core.actor import Actor
+from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, UserCreate, UserUpdatePatch
+from sfmshop.schemas.events import EventFilter, EventResponse
 from sfmshop.services import queue_consumer
 from sfmshop.services.event_log_service import EventLogService, build_event
 from sfmshop.services.health_service import HealthService
@@ -21,7 +22,7 @@ from sfmshop.services.order_service import OrderService
 from sfmshop.services.product_service import ProductService
 from sfmshop.services.user_service import UserService
 from tests.test_queue import FakeMessage, build_consumer, build_producer
-from tests.test_services import FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
+from tests.test_services import ACTOR, FakeCache, FakePayments, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake
 
 
 OCCURRED_AT = datetime(2026, 10, 7, 12, 0, tzinfo=timezone.utc)
@@ -81,6 +82,8 @@ def test_build_event_normalizes_entity_ids():
         "product_ids": [3, 4],
         "user_ids": [1],
         "order_ids": [7],
+        "actor_id": None,
+        "actor_role": None,
         "payload": {"order_ids": 7, "user_ids": 1, "product_ids": [3, None, 4]},
     }
     assert build_event("product.created", {})["_id"]
@@ -89,13 +92,13 @@ def test_build_event_normalizes_entity_ids():
 @pytest.mark.anyio
 @pytest.mark.parametrize("operation, routing_key, ids", [
     (lambda q: ProductService(ProductRepoFake(), FakeCache(), q).create_product(
-        ProductCreate(name="Desk", price=Decimal("10.00"), quantity=1)),
+        ProductCreate(name="Desk", price=Decimal("10.00"), quantity=1), actor=ACTOR),
      "product.created", {"product_ids": [44], "user_ids": [], "order_ids": []}),
     (lambda q: UserService(UserRepoFake(), OrderRepoFake(), FakeCache(), q).register_user(
         UserCreate(name="New", email="new@test.com", age=20, password="abc12345")),
      "user.created", {"product_ids": [], "user_ids": [2], "order_ids": []}),
     (lambda q: OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), q).create_order(
-        1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)])),
+        1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]), actor=ACTOR),
      "order.created", {"product_ids": [1], "user_ids": [1], "order_ids": [77]}),
 ])
 async def test_service_events_are_stored_with_entity_ids(operation, routing_key, ids):
@@ -177,7 +180,8 @@ async def test_indexes_include_ttl_for_retention():
 
     ttl = [kwargs for keys, kwargs in collection.indexes if "expireAfterSeconds" in kwargs]
     assert ttl == [{"name": "occurred_at_ttl", "expireAfterSeconds": 30 * 86400}]
-    assert len(collection.indexes) == 5
+    assert len(collection.indexes) == 6
+    assert ([("actor_id", 1), ("occurred_at", -1)], {}) in collection.indexes
 
 
 @pytest.mark.anyio
@@ -317,3 +321,110 @@ def test_event_log_returns_503_when_mongo_is_down():
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Журнал событий временно недоступен"}
+
+
+async def stored(queue):
+    collection = Collection()
+    consumer, _ = build_consumer()
+    consumer.events = EventRepository(collection)
+    for _, routing_key, payload in queue.events:
+        await consumer.process_event_log(event_message(routing_key, payload, message_id=routing_key))
+    return {document["event"]: document for document in collection.documents}
+
+
+@pytest.mark.anyio
+async def test_admin_action_on_someone_else_is_stored_with_admin_as_actor():
+    queue = FakeQueue()
+    await UserService(UserRepoFake(), OrderRepoFake(), FakeCache(), queue).update_user(
+        1, UserUpdatePatch(name="New"), actor=Actor(9, "admin"))
+
+    document = (await stored(queue))["user.updated"]
+
+    assert document["user_ids"] == [1]
+    assert (document["actor_id"], document["actor_role"]) == (9, "admin")
+
+
+@pytest.mark.anyio
+async def test_new_user_is_the_actor_of_own_registration():
+    queue = FakeQueue()
+    await UserService(UserRepoFake(), OrderRepoFake(), FakeCache(), queue).register_user(
+        UserCreate(name="New", email="new@test.com", age=20, password="abc12345"))
+
+    document = (await stored(queue))["user.created"]
+
+    assert document["user_ids"] == [2]
+    assert (document["actor_id"], document["actor_role"]) == (2, "user")
+
+
+@pytest.mark.anyio
+async def test_buyer_is_the_actor_of_order_events():
+    queue = FakeQueue()
+    await OrderService(OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), queue, FakePayments()).create_order(
+        1, OrderCreate(items=[OrderItemBase(product_id=1, quantity=1)]), actor=ACTOR)
+
+    documents = await stored(queue)
+
+    assert {event: doc["actor_id"] for event, doc in documents.items()} == {"order.created": 1, "order.paid": 1}
+
+
+@pytest.mark.anyio
+async def test_find_filters_by_actor():
+    collection = Collection()
+
+    await EventRepository(collection).find(EventFilter(actor_id=9, event="user.balance_topped_up"))
+
+    assert collection.query == {"event": "user.balance_topped_up", "actor_id": 9}
+
+
+def test_event_log_accepts_actor_filter():
+    service = SimpleNamespace(list_events=AsyncMock(return_value=[]))
+    use_events(service, SimpleNamespace(id=9, is_admin=True, is_active=True))
+
+    assert client.get("/v1/events/", params={"actor_id": 9}).status_code == 200
+    [filters] = service.list_events.await_args.args
+    assert filters == EventFilter(actor_id=9)
+    assert client.get("/v1/events/", params={"actor_id": 0}).status_code == 422
+
+
+def test_old_events_without_actor_are_returned_with_nulls():
+    document = build_event("order.deleted", {"order_ids": 7}, "m-old", OCCURRED_AT)
+    del document["actor_id"], document["actor_role"]
+
+    response = EventResponse.model_validate({**document, "id": document["_id"]})
+
+    assert response.actor_id is None and response.actor_role is None
+
+
+@pytest.mark.anyio
+async def test_repeated_top_up_is_stored_once_thanks_to_fixed_message_id(monkeypatch):
+    producer, _ = build_producer(monkeypatch, [None, None])
+    producer.exchanges["user_exchange"] = producer.exchanges.pop("order_exchange")
+
+    for _ in range(2):
+        await producer.publish_event("user_exchange", "user.balance_topped_up", {"user_ids": 1},
+                                     message_id="top-up-1-a-1")
+
+    sent = [call.args[0] for call in producer.exchanges["user_exchange"].publish.await_args_list]
+    assert [message.message_id for message in sent] == ["top-up-1-a-1", "top-up-1-a-1"]
+
+    collection = Collection()
+    consumer, _ = build_consumer()
+    consumer.events = EventRepository(collection)
+    for message in sent:
+        await consumer.process_event_log(event_message("user.balance_topped_up", {"user_ids": 1},
+                                                       message_id=message.message_id))
+    assert len(collection.documents) == 1
+
+
+def test_every_event_published_by_services_reaches_cache_and_event_log():
+    import re
+    from pathlib import Path
+
+    services = Path(__file__).resolve().parents[1] / "sfmshop" / "services"
+    published = set()
+    for path in services.glob("*.py"):
+        published |= set(re.findall(r'"((?:user|product|review|order)\.[a-z_]+)"', path.read_text(encoding="utf-8")))
+
+    subscribed = {routing_key for _, routing_key in queue_consumer.ALL_EVENTS}
+    assert "user.balance_topped_up" in published
+    assert published <= subscribed, sorted(published - subscribed)

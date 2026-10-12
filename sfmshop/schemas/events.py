@@ -10,6 +10,7 @@ class EventFilter(Base):
     product_id: int | None = Field(None, ge=1)
     user_id: int | None = Field(None, ge=1)
     order_id: int | None = Field(None, ge=1)
+    actor_id: int | None = Field(None, ge=1, description="Кто выполнил действие")
     before: datetime | None = Field(None, description="Вернуть события раньше этого момента (для пагинации)")
     limit: int = Field(50, ge=1, le=200)
 
@@ -21,6 +22,8 @@ class EventResponse(Base):
     product_ids: list[int]
     user_ids: list[int]
     order_ids: list[int]
+    actor_id: int | None = None
+    actor_role: str | None = None
     payload: dict
 
     model_config = ConfigDict(from_attributes=True)

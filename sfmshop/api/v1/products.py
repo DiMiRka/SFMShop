@@ -1,5 +1,6 @@
 from fastapi import APIRouter, status, Response
 
+from sfmshop.core.actor import Actor
 from sfmshop.schemas import ProductCreate, ProductUpdate
 from sfmshop.core.dependencies import admin_user, product_write_service, product_read_service
 
@@ -21,14 +22,14 @@ async def get_product(service: product_read_service, product_id: int):
 
 @products_router.post("/", summary="Создать новый товар", status_code=status.HTTP_201_CREATED)
 async def post_product(admin: admin_user, service: product_write_service, product: ProductCreate):
-    return await service.create_product(product)
+    return await service.create_product(product, actor=Actor.of(admin))
 
 
 @products_router.put("/{product_id}", summary="Обновить товар", status_code=status.HTTP_200_OK)
 async def put_product(admin: admin_user, service: product_write_service, product_id: int, product: ProductUpdate):
-    return await service.update_product(product_id, product)
+    return await service.update_product(product_id, product, actor=Actor.of(admin))
 
 
 @products_router.delete("/{product_id}", summary="Удалить товар", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_product(admin: admin_user, service: product_write_service, product_id: int):
-    return await service.delete_product(product_id)
+    return await service.delete_product(product_id, actor=Actor.of(admin))

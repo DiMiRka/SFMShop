@@ -1,6 +1,7 @@
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 
+from sfmshop.core.actor import Actor
 from sfmshop.core.permissions import ensure_owner, ensure_self_or_admin
 from sfmshop.database.models import User
 from sfmshop.core.exceptions import BusinessLogicError, ForbiddenError, NotFoundError
@@ -58,7 +59,7 @@ class ReviewService:
             logger.warning(f"Duplicate review user id={user.id} product id={product_id}")
             raise BusinessLogicError("Вы уже оставили отзыв на этот товар")
 
-        await self._publish("review.created", review_db.id, product_id, user.id)
+        await self._publish("review.created", review_db.id, product_id, user.id, Actor.of(user))
         return ReviewResponse.model_validate(review_db).model_dump(mode="json")
 
     async def update_review(self, user: User, review_id: int, review_update: ReviewUpdate) -> dict:
@@ -71,7 +72,7 @@ class ReviewService:
             ensure_owner(user, review_db.user_id)
             await self.review_rep.update(review_db, review_update.model_dump(exclude_unset=True))
 
-        await self._publish("review.updated", review_id, review_db.product_id, review_db.user_id)
+        await self._publish("review.updated", review_id, review_db.product_id, review_db.user_id, Actor.of(user))
         return ReviewResponse.model_validate(review_db).model_dump(mode="json")
 
     async def delete_review(self, user: User, review_id: int) -> None:
@@ -85,12 +86,12 @@ class ReviewService:
             product_id, author_id = review_db.product_id, review_db.user_id
             await self.review_rep.delete(review_db)
 
-        await self._publish("review.deleted", review_id, product_id, author_id)
+        await self._publish("review.deleted", review_id, product_id, author_id, Actor.of(user))
 
-    async def _publish(self, routing_key: str, review_id: int, product_id: int, user_id: int) -> None:
+    async def _publish(self, routing_key: str, review_id: int, product_id: int, user_id: int, actor: Actor) -> None:
         await self.queue.publish_event(
             "product_exchange",
             routing_key,
-            {"review_ids": review_id, "product_ids": product_id, "user_ids": user_id},
+            {"review_ids": review_id, "product_ids": product_id, "user_ids": user_id, **actor.event_fields()},
         )
 

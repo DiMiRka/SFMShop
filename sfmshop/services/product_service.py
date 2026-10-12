@@ -1,6 +1,7 @@
 from decimal import Decimal
 from loguru import logger
 
+from sfmshop.core.actor import Actor
 from sfmshop.repositories.product_repository import ProductRepository
 from sfmshop.services.cache_service import CacheService
 from sfmshop.services.queue_producer import QueueProducer
@@ -70,7 +71,7 @@ class ProductService:
         )
         return [ProductResponse.model_validate(product).model_dump(mode="json") for product in products]
 
-    async def create_product(self, product: ProductCreate):
+    async def create_product(self, product: ProductCreate, *, actor: Actor):
         data = product.model_dump(mode="json")
 
         async with self.product_rep.db.begin():
@@ -79,12 +80,12 @@ class ProductService:
         await self.queue.publish_event(
             "product_exchange",
             "product.created",
-            {"product_ids": product_id}
+            {"product_ids": product_id, **actor.event_fields()}
         )
 
         return {"id": product_id, "message": "Товар добавлен"}
 
-    async def update_product(self, product_id: int, product_update: ProductUpdate):
+    async def update_product(self, product_id: int, product_update: ProductUpdate, *, actor: Actor):
         async with self.product_rep.db.begin():
             product_db = await self.product_rep.get_by_id(product_id)
 
@@ -99,12 +100,12 @@ class ProductService:
         await self.queue.publish_event(
             "product_exchange",
             "product.updated",
-            {"product_ids": product_id}
+            {"product_ids": product_id, **actor.event_fields()}
         )
 
         return {"id": product_id, "message": "Товар обновлен"}
 
-    async def delete_product(self, product_id: int):
+    async def delete_product(self, product_id: int, *, actor: Actor):
         async with self.product_rep.db.begin():
             product_db = await self.product_rep.get_by_id(product_id)
 
@@ -117,7 +118,7 @@ class ProductService:
         await self.queue.publish_event(
             "product_exchange",
             "product.deleted",
-            {"product_ids": product_id}
+            {"product_ids": product_id, **actor.event_fields()}
         )
 
         return {"id": product_id, "message": "Товар удален"}

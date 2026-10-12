@@ -80,7 +80,8 @@ async def test_buyer_leaves_review_and_event_is_published():
     assert created["rating"] == 5 and created["text"] == "Отличная мышь"
     assert created["user_id"] == 1 and created["product_id"] == 1
     assert queue.events == [("product_exchange", "review.created",
-                             {"review_ids": created["id"], "product_ids": 1, "user_ids": 1})]
+                             {"review_ids": created["id"], "product_ids": 1, "user_ids": 1,
+                              "actor_id": 1, "actor_role": "user"})]
 
 
 async def test_only_buyer_can_review_product():
@@ -163,7 +164,8 @@ async def test_review_is_deleted_by_author_or_admin(user, allowed):
         await service.delete_review(user, 5)
         assert 5 not in reviews.reviews
         assert queue.events == [("product_exchange", "review.deleted",
-                                 {"review_ids": 5, "product_ids": 1, "user_ids": 1})]
+                                 {"review_ids": 5, "product_ids": 1, "user_ids": 1,
+                                  "actor_id": user.id, "actor_role": "admin" if user.is_admin else "user"})]
     else:
         with pytest.raises(ForbiddenError):
             await service.delete_review(user, 5)
