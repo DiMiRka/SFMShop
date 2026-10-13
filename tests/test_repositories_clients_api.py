@@ -12,7 +12,7 @@ from sfmshop.database.models import OrderItem as DbOrderItem
 from sfmshop.database.models import Product as DbProduct
 from sfmshop.database.models import User as DbUser
 from sfmshop.repositories.order_repository import OrderRepository
-from sfmshop.repositories.product_repository import ProductRepository
+from sfmshop.repositories.product_repository import ProductRepository, SearchResult
 from sfmshop.repositories.user_repository import UserRepository
 from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 
@@ -44,15 +44,21 @@ class ExecuteResult:
 
 
 class RepoDb:
-    def __init__(self, result):
+    def __init__(self, result, counts=(1,)):
         self.result = result
+        self.counts = list(counts)
+        self.queries = []
         self.added = []
         self.deleted = []
         self.flushed = False
 
     async def execute(self, query):
         self.query = query
+        self.queries.append(query)
         return self.result
+
+    async def scalar(self, query):
+        return self.counts.pop(0)
 
     def add(self, obj):
         if getattr(obj, "id", None) is None:
@@ -206,7 +212,7 @@ async def test_product_search_applies_filters_and_escapes_wildcards():
         limit=5,
     )
 
-    assert result == [product]
+    assert result == SearchResult([product], 1, False)
     sql, params = compiled_sql(db.query)
     assert "products.name ILIKE" in sql and "ESCAPE" in sql
     assert "products.price >=" in sql and "products.price <=" in sql
@@ -217,14 +223,39 @@ async def test_product_search_applies_filters_and_escapes_wildcards():
 
 
 async def test_product_search_without_filters_caps_limit():
-    db = RepoDb(ExecuteResult([]))
+    db = RepoDb(ExecuteResult([]), counts=[0])
     repo = ProductRepository(db)
 
-    assert await repo.search(limit=1000) == []
+    assert await repo.search(limit=1000) == SearchResult([], 0, False)
 
     sql, params = compiled_sql(db.query)
     assert "WHERE" not in sql
-    assert params["param_1"] == 20
+    assert params["param_1"] == 100
+
+
+async def test_search_falls_back_to_similarity_only_when_nothing_matches_exactly():
+    product = DbProduct(name="Мышь беспроводная", price=Decimal("990.00"), quantity=1)
+    db = RepoDb(ExecuteResult([product]), counts=[0, 4])
+
+    result = await ProductRepository(db).search(name_query="мыш беспроводня", limit=2, offset=2)
+
+    assert result == SearchResult([product], 4, True)
+    from sqlalchemy.dialects.postgresql import asyncpg
+
+    exact, similar = (str(query.compile(dialect=asyncpg.dialect())) for query in db.queries)
+    assert "ILIKE" in exact
+    assert "products.name %>" in similar and "word_similarity" in similar and "ILIKE" not in similar
+    assert similar.index("word_similarity") > similar.index("ORDER BY")
+
+
+async def test_search_keeps_exact_matches_and_skips_fallback_for_short_queries():
+    db = RepoDb(ExecuteResult([]), counts=[3])
+    assert (await ProductRepository(db).search(name_query="мышь")).fuzzy is False
+    assert len(db.queries) == 1
+
+    db = RepoDb(ExecuteResult([]), counts=[0])
+    assert await ProductRepository(db).search(name_query="мы") == SearchResult([], 0, False)
+    assert len(db.queries) == 1
 
 
 async def test_order_lists_can_be_sorted_newest_first():

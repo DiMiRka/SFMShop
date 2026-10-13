@@ -218,3 +218,28 @@ def test_register_returns_created_user_matching_response_schema():
     body = response.json()
     assert body["email"] == "new@test.com" and "balance" not in body
     assert "hashed_password" not in body
+
+
+def test_products_list_switches_to_search_when_q_is_given():
+    service = MagicMock()
+    service.get_all_products = AsyncMock(return_value={"total": 0, "limit": 100, "offset": 0, "products": []})
+    service.search_catalog = AsyncMock(return_value={"total": 0, "limit": 5, "offset": 10, "fuzzy": True,
+                                                     "products": []})
+
+    async def override_product_service():
+        return service
+
+    app.dependency_overrides[dependencies.get_product_read_service] = override_product_service
+
+    response = client.get("/v1/products/", params={"q": "мыш", "limit": 5, "offset": 10})
+
+    assert response.status_code == 200 and response.json()["fuzzy"] is True
+    service.search_catalog.assert_awaited_once_with("мыш", 5, 10)
+    service.get_all_products.assert_not_awaited()
+
+    assert client.get("/v1/products/").status_code == 200
+    service.get_all_products.assert_awaited_once_with(100, 0)
+
+    for bad in ("мы", "x" * 101):
+        assert client.get("/v1/products/", params={"q": bad}).status_code == 422
+    assert service.search_catalog.await_count == 1

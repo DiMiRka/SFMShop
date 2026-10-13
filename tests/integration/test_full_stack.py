@@ -218,7 +218,7 @@ def test_product_search_escapes_wildcards_on_real_postgres(client, admin):
 
     async def search(**filters):
         async with async_session() as session:
-            return [p.id for p in await ProductRepository(session).search(**filters)]
+            return [p.id for p in (await ProductRepository(session).search(**filters)).products]
 
     assert client.portal.call(lambda: search(name_query=f"100%_wool {marker}")) == [literal_id]
     assert len(client.portal.call(lambda: search(name_query=marker))) == 3
@@ -254,3 +254,30 @@ def test_wallet_lives_in_payment_service_and_admin_delete_refunds(client, admin,
     assert client.delete(f"/v1/orders/{order.json()['id']}", headers=admin).status_code == 204
     assert balance(client, headers, user["id"]) == start + 100
     eventually(lambda: client.get(f"/v1/products/{product_id}").json()["quantity"] == 5)
+
+
+def test_catalog_search_ignores_case_and_forgives_typos(client, admin):
+    marker = uuid.uuid4().hex[:8]
+    mouse_id = create_product(client, admin, name=f"Мышь беспроводная {marker}", price="990.00")
+    create_product(client, admin, name=f"Клавиатура механическая {marker}", price="4500.00")
+
+    exact = client.get("/v1/products/", params={"q": f"МЫШЬ БЕСПРОВОДНАЯ {marker}"}).json()
+    assert exact["fuzzy"] is False and [p["id"] for p in exact["products"]] == [mouse_id]
+
+    typo = client.get("/v1/products/", params={"q": f"мыш беспроводня {marker}"}).json()
+    assert typo["fuzzy"] is True and typo["products"][0]["id"] == mouse_id
+
+    assert client.get("/v1/products/", params={"q": "мы"}).status_code == 422
+
+
+@pytest.mark.parametrize("condition", ["name ILIKE '%беспровод%'", "name %> 'мыш беспроводня'"])
+def test_search_conditions_can_use_trigram_index(condition):
+    engine = create_engine(app_settings.sync_postgres_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("SET LOCAL enable_seqscan = off"))
+            plan = "\n".join(connection.execute(text(f"EXPLAIN SELECT id FROM products WHERE {condition}")).scalars())
+    finally:
+        engine.dispose()
+
+    assert "ix_products_name_trgm" in plan, plan

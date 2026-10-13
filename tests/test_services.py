@@ -11,6 +11,7 @@ from sfmshop.database.models import Product as DbProduct, User as DbUser
 from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
 from sfmshop.core.security import get_password_hash, verify_password
 from sfmshop.core.actor import Actor
+from sfmshop.repositories.product_repository import SearchResult
 from sfmshop.services.order_service import OrderService
 from sfmshop.services.product_service import ProductService
 from sfmshop.services.user_service import UserService
@@ -520,7 +521,7 @@ async def test_product_search_passes_filters_and_serializes_out_of_stock_product
     class SearchRepo(ProductRepoFake):
         async def search(self, **filters):
             self.filters = filters
-            return [db_product(2, "Cable", Decimal("150.50"), 0)]
+            return SearchResult([db_product(2, "Cable", Decimal("150.50"), 0)], 1, False)
 
     repo = SearchRepo()
     service = ProductService(repo, FakeCache(), FakeQueue())
@@ -533,3 +534,19 @@ async def test_product_search_passes_filters_and_serializes_out_of_stock_product
     assert result == [{
         "id": 2, "name": "Cable", "price": "150.50", "quantity": 0, "created_at": "2026-01-01T00:00:00",
     }]
+
+
+async def test_catalog_search_returns_page_with_fuzzy_flag():
+    class SearchRepo(ProductRepoFake):
+        async def search(self, **filters):
+            self.filters = filters
+            return SearchResult([db_product(2, "Мышь беспроводная", Decimal("990.00"), 4)], 7, True)
+
+    repo = SearchRepo()
+
+    result = await ProductService(repo, FakeCache(), FakeQueue()).search_catalog("мыш беспроводня", 1, 3)
+
+    assert repo.filters == {"name_query": "мыш беспроводня", "limit": 1, "offset": 3}
+    assert result["total"] == 7 and result["fuzzy"] is True
+    assert (result["limit"], result["offset"]) == (1, 3)
+    assert result["products"][0]["name"] == "Мышь беспроводная"

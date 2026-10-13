@@ -62,14 +62,24 @@ class ProductService:
             max_price: Decimal | None = None,
             in_stock: bool = False,
             limit: int = 10) -> list[dict]:
-        products = await self.product_rep.search(
+        result = await self.product_rep.search(
             name_query=name_query,
             min_price=min_price,
             max_price=max_price,
             in_stock=in_stock,
             limit=limit,
         )
-        return [ProductResponse.model_validate(product).model_dump(mode="json") for product in products]
+        return [ProductResponse.model_validate(product).model_dump(mode="json") for product in result.products]
+
+    async def search_catalog(self, query: str, limit: int, offset: int) -> dict:
+        result = await self.product_rep.search(name_query=query, limit=limit, offset=offset)
+        return {
+            "total": result.total,
+            "limit": limit,
+            "offset": offset,
+            "fuzzy": result.fuzzy,
+            "products": [ProductResponse.model_validate(product).model_dump(mode="json") for product in result.products],
+        }
 
     async def create_product(self, product: ProductCreate, *, actor: Actor):
         data = product.model_dump(mode="json")

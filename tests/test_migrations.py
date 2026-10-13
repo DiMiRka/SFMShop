@@ -43,3 +43,11 @@ def test_named_unique_constraints_from_models_exist_in_migrated_database(inspect
     for table, names in model_constraint_names(UniqueConstraint).items():
         actual = {c["name"] for c in inspector.get_unique_constraints(table)}
         assert names <= actual, f"{table}: в миграциях нет {sorted(names - actual)}"
+
+
+def test_products_name_has_trigram_gin_index(inspector):
+    [index] = [i for i in inspector.get_indexes("products") if i["name"] == "ix_products_name_trgm"]
+
+    assert index["column_names"] == ["name"]
+    assert index["dialect_options"]["postgresql_using"] == "gin"
+    assert index["dialect_options"]["postgresql_ops"] == {"name": "gin_trgm_ops"}

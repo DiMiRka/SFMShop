@@ -1,12 +1,21 @@
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import cast
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import Select, select, func
 
 from sfmshop.repositories.base_repository import BaseRepository
 from sfmshop.database.models import Product, Review
 
-SEARCH_LIMIT_MAX = 20
+SEARCH_LIMIT_MAX = 100
+FUZZY_MIN_LENGTH = 3
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    products: list[Product]
+    total: int
+    fuzzy: bool
 
 
 class ProductRepository(BaseRepository):
@@ -27,12 +36,9 @@ class ProductRepository(BaseRepository):
             min_price: Decimal | None = None,
             max_price: Decimal | None = None,
             in_stock: bool = False,
-            limit: int = 10) -> list[Product]:
+            limit: int = 10,
+            offset: int = 0) -> SearchResult:
         query = select(Product)
-
-        if name_query:
-            escaped = name_query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            query = query.where(Product.name.ilike(f"%{escaped}%", escape="\\"))
         if min_price is not None:
             query = query.where(Product.price >= min_price)
         if max_price is not None:
@@ -41,8 +47,23 @@ class ProductRepository(BaseRepository):
             query = query.where(Product.quantity > 0)
 
         limit = max(1, min(limit, SEARCH_LIMIT_MAX))
-        result = await self.db.execute(query.order_by(Product.price, Product.id).limit(limit))
-        return list(result.scalars().all())
+        if not name_query:
+            return await self._page(query, (Product.price, Product.id), limit, offset, fuzzy=False)
+
+        escaped = name_query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        exact = query.where(Product.name.ilike(f"%{escaped}%", escape="\\"))
+        result = await self._page(exact, (Product.price, Product.id), limit, offset, fuzzy=False)
+        if result.total or len(name_query) < FUZZY_MIN_LENGTH:
+            return result
+
+        similar = query.where(Product.name.op("%>")(name_query))
+        order = (func.word_similarity(name_query, Product.name).desc(), Product.price, Product.id)
+        return await self._page(similar, order, limit, offset, fuzzy=True)
+
+    async def _page(self, query: Select, order: tuple, limit: int, offset: int, fuzzy: bool) -> SearchResult:
+        total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
+        result = await self.db.execute(query.order_by(*order).offset(offset).limit(limit))
+        return SearchResult(list(result.scalars().all()), total or 0, fuzzy)
 
     async def get_by_ids_for_update(self, ids: list[int]) -> list[Product]:
         result = await self.db.execute(

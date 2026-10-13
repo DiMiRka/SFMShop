@@ -2,7 +2,7 @@ from decimal import Decimal
 from datetime import datetime
 from typing import List
 
-from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Text, UniqueConstraint, false, func
+from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Index, Text, UniqueConstraint, false, func
 from sqlalchemy.orm import DeclarativeBase, relationship, mapped_column, Mapped
 
 from sfmshop.core.order_status import OrderStatus
@@ -30,6 +30,9 @@ class User(Base):
 
 class Product(Base):
     __tablename__ = 'products'
+    __table_args__ = (
+        Index("ix_products_name_trgm", "name", postgresql_using="gin", postgresql_ops={"name": "gin_trgm_ops"}),
+    )
 
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)

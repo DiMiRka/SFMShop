@@ -1,4 +1,6 @@
-from fastapi import APIRouter, status, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Query, status, Response
 
 from sfmshop.core.actor import Actor
 from sfmshop.schemas import ProductCreate, ProductUpdate
@@ -8,9 +10,13 @@ from sfmshop.core.dependencies import admin_user, product_write_service, product
 products_router = APIRouter(prefix="/products", tags=['products'])
 
 
-@products_router.get("/", summary="Получить все товары", status_code=status.HTTP_200_OK)
+@products_router.get("/", summary="Получить товары или найти по названию", status_code=status.HTTP_200_OK)
 async def get_products(service: product_read_service, response: Response,
-                       limit: int = 100, offset: int = 0):
+                       limit: int = 100, offset: int = 0,
+                       q: Annotated[str | None, Query(min_length=3, max_length=100,
+                                                      description="Поиск по названию, допускает опечатки")] = None):
+    if q is not None:
+        return await service.search_catalog(q, limit, offset)
 
     return await service.get_all_products(limit, offset)
 

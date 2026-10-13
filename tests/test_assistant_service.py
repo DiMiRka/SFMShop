@@ -8,6 +8,7 @@ from sfmshop.clients.llm import AssistantMessage, LLMResult, ToolCall, ToolResul
 from sfmshop.schemas.assistant import AssistantResponse
 from sfmshop.services.assistant.service import (INVALID_RESPONSE_ANSWER, REFUSAL_ANSWER, STEPS_EXCEEDED_ANSWER,
                                             SYSTEM_PROMPT, AssistantService)
+from sfmshop.repositories.product_repository import SearchResult
 from sfmshop.services.order_service import OrderService
 from sfmshop.services.product_service import ProductService
 from tests.test_services import (FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake,
@@ -42,7 +43,7 @@ class NewestFirstOrders(OrderRepoFake):
 class SearchRepo(ProductRepoFake):
     async def search(self, **filters):
         self.filters = filters
-        return [db_product(3, "Keyboard", Decimal("4500.00"), 2)]
+        return SearchResult([db_product(3, "Keyboard", Decimal("4500.00"), 2)], 1, False)
 
 
 def call(name, arguments, call_id="t1"):
