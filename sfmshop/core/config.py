@@ -54,7 +54,8 @@ class AppSettings(BaseSettings):
 
     llm_provider: str = "anthropic"
     anthropic_api_key: str | None = None
-    llm_model: str = "claude-opus-5-5"
+    openai_api_key: str | None = None
+    llm_model: str | None = None
     llm_timeout: float = 30.0
     llm_max_retries: int = 3
     llm_max_tool_steps: int = 5

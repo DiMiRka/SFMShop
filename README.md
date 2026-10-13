@@ -28,7 +28,7 @@ REST API интернет-магазина \
 - мониторинг оплаты и почты (метрики payment-service на порту 9101, ряд «Оплата и письма» в Grafana,
   алерты на недоступность сервиса оплаты, 5xx, всплеск отказов и сбои SMTP, правила алертов покрыты тестами `promtool`)
 - единый формат ошибок через доменные исключения и exception handlers
-- ИИ-ассистент магазина на Claude API (tool calling, structured output, права проверяет сервер, а не модель)
+- ИИ-ассистент магазина на Claude API или OpenAI на выбор (tool calling, structured output, права проверяет сервер, а не модель)
 - письмо покупателю об оплаченном заказе через SMTP (aiosmtplib) из консьюмера RabbitMQ, без дублей при повторной доставке, локально письма видны в Mailpit
 - отдельный микросервис оплаты `payment_service/` со своей базой (кошельки, журнал операций, идемпотентные оплаты и возвраты)
 
@@ -42,7 +42,7 @@ REST API интернет-магазина \
 | Очередь        | RabbitMQ 3 (aio-pika)                                  |
 | Журнал событий | MongoDB 7 (асинхронный PyMongo)                        |
 | Безопасность   | JWT (python-jose), argon2 (passlib), slowapi           |
-| LLM            | Claude API (официальный SDK `anthropic`, async)        |
+| LLM            | Claude API (SDK `anthropic`) или OpenAI Responses API (SDK `openai`), async |
 | Инфраструктура | Docker, Docker Compose, Kubernetes, GitHub Actions     |
 | Качество       | pytest, pytest-cov, ruff, mypy, Codecov                |
 | Мониторинг     | Prometheus (prometheus_client), Grafana, Alertmanager, Sentry |
@@ -349,8 +349,10 @@ Authorization: Bearer <access_token>
   Если провайдер недоступен или `ANTHROPIC_API_KEY` не задан, эндпоинт отвечает 503, остальное приложение работает
 - **Каждый запрос независим:** история диалога не хранится
 
-Провайдер LLM спрятан за интерфейсом `LLMClient` (`Protocol`) и выбирается настройкой `LLM_PROVIDER` \
-Сейчас реализован один провайдер Anthropic \
+Провайдер LLM спрятан за интерфейсом `LLMClient` (`Protocol`) и выбирается настройкой `LLM_PROVIDER` (`anthropic` или `openai`) \
+Ключ задаётся в `ANTHROPIC_API_KEY` или `OPENAI_API_KEY`, модель в `LLM_MODEL`
+(если пусто, то `claude-opus-5-5` или `gpt-5.5`) \
+Сервис ассистента о провайдере не знает (OpenAI подключён без единой правки в нём) \
 Подробнее решения описаны в [docs/llm_assistant.md](docs/llm_assistant.md)
 
 ## Тесты

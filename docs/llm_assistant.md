@@ -8,6 +8,7 @@
 ```
 sfmshop/clients/llm/base.py            # Protocol LLMClient и нейтральные типы сообщений
 sfmshop/clients/llm/anthropic.py       # реализация на официальном SDK anthropic (AsyncAnthropic)
+sfmshop/clients/llm/openai.py          # реализация на официальном SDK openai, Responses API (AsyncOpenAI)
 sfmshop/clients/llm/__init__.py        # реестр провайдеров, выбор по LLM_PROVIDER
 sfmshop/services/assistant/tools.py    # реестр инструментов: имя → схема аргументов + обработчик
 sfmshop/services/assistant/service.py  # AssistantService: цикл tool use, лимиты, сборка ответа
@@ -66,6 +67,35 @@ sfmshop/api/v1/assistant.py            # роутер, current_user, rate limit
 модель может исправиться на следующем шаге. \
 Деньги в результатах являются строками, как в JSON API
 
+## Два провайдера
+
+Провайдер выбирается настройкой `LLM_PROVIDER`, модель `LLM_MODEL` (пусто значит модель провайдера по умолчанию)\
+Ассистент работает с нейтральными типами `UserMessage`, `ToolCall`, `ToolResult`, `LLMResult`,
+а каждый клиент переводит их в формат своего API
+
+| Наше | Anthropic Messages API | OpenAI Responses API |
+| --- | --- | --- |
+| системный промпт | `system` | `instructions` |
+| инструмент | `tools[]` с `input_schema`, `strict` | `tools[]` типа `function` с `parameters`, `strict` |
+| вызов инструмента | блок `tool_use` | элемент `function_call`, аргументы строкой JSON |
+| результат инструмента | блок `tool_result` | элемент `function_call_output` |
+| формат ответа | `output_config.format` | `text.format` типа `json_schema` |
+| отказ | `stop_reason: refusal` | элемент `refusal` в ответе |
+
+- **Строгие схемы OpenAI**\
+  В строгом режиме OpenAI требует, чтобы все поля были в `required`, а у объектов стояло `additionalProperties: false`
+  (необязательное поле описывается как `["string", "null"]`)\
+  `strict_schema` переводит схемы Pydantic под эти требования, ограничения, которых нет в строгом режиме
+  (`maxLength`, `pattern`), и значения по умолчанию переносит текстом в `description`\
+  Проверять их продолжает сервер через Pydantic, как и для Anthropic
+- **История без хранения у провайдера**\
+  Запросы к OpenAI идут с `store=False` (диалог у провайдера не хранится, вся история передаётся в каждом запросе)\
+  Чтобы модель с рассуждениями не теряла их между шагами, запрашивается `include=["reasoning.encrypted_content"]`,
+  и элементы ответа возвращаются в следующий запрос без изменений
+- **Проверка**\
+  Тест прогоняет полный цикл ассистента (поиск товара, вызов инструмента, итоговый ответ) на мок-транспорте OpenAI
+  через настоящий `AssistantService`
+
 ## Устойчивость
 
 - Таймаут (`LLM_TIMEOUT`) и повторы с экспоненциальной задержкой (`LLM_MAX_RETRIES`) берутся из SDK.\
@@ -86,11 +116,10 @@ sfmshop/api/v1/assistant.py            # роутер, current_user, rate limit
 
 ## Поиск и индексы
 
-`ProductRepository.search` фильтрует по `ilike '%…%'`, диапазону `price` и `quantity > 0`, лимит не больше 20.\
-Спецсимволы `%` и `_` в запросе экранируются. \
-Индекс на `price` не добавлен: каталог небольшой, а поиск по подстроке
-всё равно читает таблицу целиком, B-tree для `ilike '%…%'` не помогает. Для реального поиска нужен
-`pg_trgm` с GIN-индексом по `name` или полнотекстовый поиск
+`ProductRepository.search` фильтрует по `ilike '%…%'`, диапазону `price` и `quantity > 0`\
+Спецсимволы `%` и `_` в запросе экранируются\
+Подстроку ищет GIN-индекс `pg_trgm`, а если точных совпадений нет, поиск переходит на похожесть и находит названия с опечатками,
+подробности и замеры в [database.md](database.md)
 
 ## Возможное развитие
 
