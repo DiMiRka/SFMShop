@@ -397,7 +397,7 @@ GET /v1/products/semantic-search?q=что подарить бегуну&max_pric
 
 1. Задайте `OPENAI_API_KEY` в `.env` (модель `EMBEDDING_MODEL`, по умолчанию `text-embedding-3-small`) \
    Ключ нужен и при `LLM_PROVIDER=anthropic`: своего API эмбеддингов у Anthropic нет
-2. Образ БД в compose `pgvector/pgvector:0.8.7-pg17` (это PostgreSQL 17 с расширением, старый том подходит)
+2. Образ БД в compose `pgvector/pgvector:0.8.7-pg17-trixie` (это PostgreSQL 17 на той же Debian trixie, что и `postgres:17`, поэтому старый том подходит)
 3. Посчитайте эмбеддинги для уже существующих товаров:
 
 ```bash

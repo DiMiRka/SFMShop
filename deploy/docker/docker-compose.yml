@@ -99,7 +99,7 @@ services:
       - payment_postgres_data:/var/lib/postgresql/data
 
   db:
-    image: pgvector/pgvector:0.8.7-pg17
+    image: pgvector/pgvector:0.8.7-pg17-trixie
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
