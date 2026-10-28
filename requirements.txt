@@ -45,6 +45,7 @@ orjson==3.11.8
 packaging==26.0
 pamqp==3.3.0
 passlib==1.7.4
+pgvector==0.5.1
 pluggy==1.6.0
 prometheus_client==0.26.0
 propcache==0.4.1

@@ -4,8 +4,12 @@ from typing import List
 
 from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Index, Text, UniqueConstraint, false, func
 from sqlalchemy.orm import DeclarativeBase, relationship, mapped_column, Mapped
+from pgvector.sqlalchemy import VECTOR
 
 from sfmshop.core.order_status import OrderStatus
+
+
+EMBEDDING_DIMENSIONS = 1536
 
 
 class Base(DeclarativeBase):
@@ -36,12 +40,28 @@ class Product(Base):
 
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     items: Mapped[List["OrderItem"]] = relationship(back_populates="product", passive_deletes=True)
     reviews: Mapped[List["Review"]] = relationship(back_populates="product", passive_deletes=True)
+
+
+class ProductEmbedding(Base):
+    __tablename__ = 'product_embeddings'
+    __table_args__ = (
+        Index("ix_product_embeddings_embedding_hnsw", "embedding", postgresql_using="hnsw",
+              postgresql_ops={"embedding": "vector_cosine_ops"}),
+    )
+
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey('products.id', ondelete='CASCADE', onupdate='CASCADE'), primary_key=True)
+    embedding: Mapped[list[float]] = mapped_column(VECTOR(EMBEDDING_DIMENSIONS), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
 
 class Order(Base):

@@ -232,6 +232,15 @@ def test_product_create_rejects_non_positive_price():
             ProductCreate(name="Desk", price=Decimal(price), quantity=1)
 
 
+def test_product_description_is_optional_and_can_be_cleared():
+    assert ProductCreate(name="Desk", price=Decimal("1.00")).description is None
+    assert ProductCreate(name="Desk", price=Decimal("1.00"), description="Дубовый").description == "Дубовый"
+    assert ProductUpdate.model_validate({"description": None}).model_dump(exclude_unset=True) == {"description": None}
+
+    with pytest.raises(PydanticValidationError):
+        ProductCreate(name="Desk", price=Decimal("1.00"), description="x" * 2001)
+
+
 def test_product_update_allows_restock_above_create_limit():
     assert ProductUpdate(quantity=150).model_dump(exclude_unset=True) == {"quantity": 150}
     assert ProductUpdate(quantity=0).quantity == 0

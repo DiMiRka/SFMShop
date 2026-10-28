@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import CheckConstraint, UniqueConstraint, create_engine, inspect
 
 from sfmshop.core.config import app_settings
-from sfmshop.database.models import Base
+from sfmshop.database.models import EMBEDDING_DIMENSIONS, Base
 
 
 pytestmark = pytest.mark.skipif(
@@ -51,3 +51,18 @@ def test_products_name_has_trigram_gin_index(inspector):
     assert index["column_names"] == ["name"]
     assert index["dialect_options"]["postgresql_using"] == "gin"
     assert index["dialect_options"]["postgresql_ops"] == {"name": "gin_trgm_ops"}
+
+
+def test_product_embeddings_have_hnsw_cosine_index(inspector):
+    [index] = [i for i in inspector.get_indexes("product_embeddings")
+               if i["name"] == "ix_product_embeddings_embedding_hnsw"]
+
+    assert index["column_names"] == ["embedding"]
+    assert index["dialect_options"]["postgresql_using"] == "hnsw"
+    assert index["dialect_options"]["postgresql_ops"] == {"embedding": "vector_cosine_ops"}
+
+
+def test_product_embedding_column_matches_model_dimensions(inspector):
+    [column] = [c for c in inspector.get_columns("product_embeddings") if c["name"] == "embedding"]
+
+    assert column["type"].dim == EMBEDDING_DIMENSIONS

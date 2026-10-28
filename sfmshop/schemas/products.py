@@ -8,6 +8,7 @@ from sfmshop.schemas.base import Base, PatchBase
 
 class ProductBase(Base):
     name: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=2000)
     price: Decimal = Field(..., gt=0, max_digits=10, decimal_places=2)
     quantity: int = Field(1, ge=0)
 
@@ -17,7 +18,10 @@ class ProductCreate(ProductBase):
 
 
 class ProductUpdate(PatchBase):
+    nullable_fields = frozenset({"description"})
+
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
     price: Optional[Decimal] = Field(default=None, gt=0, max_digits=10, decimal_places=2)
     quantity: Optional[int] = Field(default=None, ge=0)
 

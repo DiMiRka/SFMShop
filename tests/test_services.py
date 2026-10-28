@@ -532,7 +532,8 @@ async def test_product_search_passes_filters_and_serializes_out_of_stock_product
         "name_query": "cab", "min_price": Decimal("100"), "max_price": None, "in_stock": False, "limit": 3,
     }
     assert result == [{
-        "id": 2, "name": "Cable", "price": "150.50", "quantity": 0, "created_at": "2026-01-01T00:00:00",
+        "id": 2, "name": "Cable", "description": None, "price": "150.50", "quantity": 0,
+        "created_at": "2026-01-01T00:00:00",
     }]
 
 
