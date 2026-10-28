@@ -179,11 +179,12 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
             return Queue()
 
     class Consumer:
-        def __init__(self, cache, url, events=None, notifier=None):
+        def __init__(self, cache, url, events=None, notifier=None, indexer=None):
             self.cache = cache
             self.url = url
             self.events = events
             self.notifier = notifier
+            self.indexer = indexer
 
         async def start(self):
             self.started = True
@@ -211,6 +212,15 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
 
     payment_client = PaymentClient()
     monkeypatch.setattr(main, "create_payment_client", lambda settings: payment_client)
+
+    class EmbeddingClient:
+        model = "test-embedding"
+
+        async def close(self):
+            self.closed = True
+
+    embedding_client = EmbeddingClient()
+    monkeypatch.setattr(main, "create_embedding_client", lambda settings: embedding_client)
 
     class Collection:
         def __init__(self):
@@ -244,12 +254,15 @@ async def test_fastapi_main_lifespan_and_logging_middleware(monkeypatch):
         assert app.state.consumer.events is app.state.events
         assert isinstance(app.state.consumer.notifier, main.OrderNotifier)
         assert app.state.consumer.notifier.cache is app.state.cache
+        assert isinstance(app.state.consumer.indexer, main.ProductIndexer)
+        assert app.state.consumer.indexer.client is embedding_client
         assert mongo.db_name == main.app_settings.mongo_db
         ttl_index = mongo.collection.indexes[0]
         assert ttl_index[1]["expireAfterSeconds"] == main.app_settings.event_log_ttl_days * 86400
 
     assert llm_client.closed
     assert payment_client.closed
+    assert embedding_client.closed
     assert mongo.closed
     assert app.state.consumer.closed
 

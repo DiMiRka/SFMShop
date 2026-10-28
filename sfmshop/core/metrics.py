@@ -51,6 +51,26 @@ ASSISTANT_TOOL_CALLS = Counter(
     "Вызовы инструментов ИИ-ассистента",
     ["tool", "result"],
 )
+EMBEDDING_REQUESTS = Counter(
+    "sfmshop_embedding_requests_total",
+    "Запросы к API эмбеддингов: ok, unavailable (после всех повторов)",
+    ["result"],
+)
+EMBEDDING_TOKENS = Counter(
+    "sfmshop_embedding_tokens_total",
+    "Токены, потраченные на эмбеддинги",
+    ["model"],
+)
+EMBEDDING_COST = Counter(
+    "sfmshop_embedding_cost_usd_total",
+    "Оценка расходов на эмбеддинги в долларах по цене из EMBEDDING_USD_PER_MILLION_TOKENS",
+    ["model"],
+)
+PRODUCTS_INDEXED = Counter(
+    "sfmshop_products_indexed_total",
+    "Индексация товаров: indexed (вектор посчитан), unchanged (текст не менялся), missing (товар удалён)",
+    ["result"],
+)
 
 UNMATCHED_ROUTE = "unmatched"
 

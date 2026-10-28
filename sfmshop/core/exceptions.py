@@ -44,3 +44,7 @@ class EventLogUnavailableError(ServiceUnavailableError):
 
 class PaymentUnavailableError(ServiceUnavailableError):
     pass
+
+
+class EmbeddingUnavailableError(ServiceUnavailableError):
+    pass

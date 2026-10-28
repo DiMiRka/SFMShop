@@ -10,6 +10,7 @@ import time
 
 from sfmshop.api.health import health_router
 from sfmshop.api.v1 import v1_router
+from sfmshop.clients.embeddings import create_embedding_client
 from sfmshop.clients.llm import create_llm_client
 from sfmshop.clients.email_client import create_email_client
 from sfmshop.clients.payment_client import create_payment_client
@@ -23,6 +24,7 @@ from sfmshop.services.log_service import configure_sentry, log_service, setup_lo
 from sfmshop.services.queue_producer import QueueProducer
 from sfmshop.services.queue_consumer import QueueConsumer
 from sfmshop.services.notification_service import OrderNotifier
+from sfmshop.services.product_index_service import ProductIndexer
 from sfmshop.api.exceptions import (validation_notfound_handler, validation_exception_handler,
                                 business_exception_handler, unauthorized_handler, forbidden_handler,
                                 service_unavailable_handler, base_exception_handler)
@@ -53,6 +55,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.cache = CacheService(app.state.redis)
     app.state.llm_client = create_llm_client(app_settings)
+    app.state.embedding_client = create_embedding_client(app_settings)
     app.state.payment_client = create_payment_client(app_settings)
 
     app.state.mongo = create_mongo_client(app_settings.mongo_url)
@@ -67,6 +70,8 @@ async def lifespan(app: FastAPI):
         url=app_settings.rabbitmq_url,
         events=app.state.events,
         notifier=OrderNotifier(async_session, app.state.cache, create_email_client(app_settings)),
+        indexer=(ProductIndexer(async_session, app.state.embedding_client)
+                 if app.state.embedding_client is not None else None),
     )
     await consumer.start()
 
@@ -82,6 +87,8 @@ async def lifespan(app: FastAPI):
     await app.state.redis.close()
     if app.state.llm_client is not None:
         await app.state.llm_client.close()
+    if app.state.embedding_client is not None:
+        await app.state.embedding_client.close()
     if app.state.payment_client is not None:
         await app.state.payment_client.close()
     await app.state.mongo.close()

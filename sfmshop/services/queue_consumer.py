@@ -8,6 +8,7 @@ from sfmshop.repositories.event_repository import EventRepository
 from sfmshop.services.cache_service import CacheService
 from sfmshop.services.event_log_service import build_event
 from sfmshop.services.notification_service import OrderNotifier
+from sfmshop.services.product_index_service import ProductIndexer
 
 
 ALL_EVENTS = (
@@ -37,11 +38,13 @@ class QueueConsumer:
             events: EventRepository | None = None,
             reconnect_base_delay: float = 1.0,
             reconnect_max_delay: float = 30.0,
-            notifier: OrderNotifier | None = None):
+            notifier: OrderNotifier | None = None,
+            indexer: ProductIndexer | None = None):
         self.url = url
         self.cache = cache
         self.events = events
         self.notifier = notifier
+        self.indexer = indexer
         self.max_retries = 3
         self.reconnect_base_delay = reconnect_base_delay
         self.reconnect_max_delay = reconnect_max_delay
@@ -79,6 +82,8 @@ class QueueConsumer:
             await self._setup_notification_consumer()
             if self.events is not None:
                 await self._setup_event_log_consumer()
+            if self.indexer is not None:
+                await self._setup_embedding_consumer()
 
         except Exception as e:
             logger.error(f"Ошибка подключения к RabbitMQ: {e}")
@@ -262,6 +267,25 @@ class QueueConsumer:
                 await self.events.add(event)
             except Exception:
                 await self._retry_or_park(message, "event_log_queue")
+
+    async def _setup_embedding_consumer(self):
+        queue = await self._declare_queue_with_retry("embedding_queue")
+
+        await queue.bind(self.product_exchange, "product.created")
+        await queue.bind(self.product_exchange, "product.updated")
+
+        await queue.consume(self.process_embedding)
+
+    async def process_embedding(self, message: aio_pika.IncomingMessage):
+        if self.indexer is None:
+            return
+
+        async with message.process(requeue=False, ignore_processed=True):
+            try:
+                product_ids = json.loads(message.body)["product_ids"]
+                await self.indexer.index(product_ids if isinstance(product_ids, list) else [product_ids])
+            except Exception:
+                await self._retry_or_park(message, "embedding_queue")
 
     async def start(self):
         if await self._connect():

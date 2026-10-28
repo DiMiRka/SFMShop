@@ -65,6 +65,22 @@ class ProductRepository(BaseRepository):
         result = await self.db.execute(query.order_by(*order).offset(offset).limit(limit))
         return SearchResult(list(result.scalars().all()), total or 0, fuzzy)
 
+    async def get_by_ids(self, ids: list[int]) -> list[Product]:
+        result = await self.db.execute(select(Product).where(Product.id.in_(ids)).order_by(Product.id))
+        return list(result.scalars().all())
+
+    async def get_ids_after(self, after_id: int, limit: int) -> list[int]:
+        result = await self.db.execute(
+            select(Product.id).where(Product.id > after_id).order_by(Product.id).limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def lock_existing_ids(self, ids: list[int]) -> set[int]:
+        result = await self.db.execute(
+            select(Product.id).where(Product.id.in_(ids)).with_for_update(key_share=True)
+        )
+        return set(result.scalars().all())
+
     async def get_by_ids_for_update(self, ids: list[int]) -> list[Product]:
         result = await self.db.execute(
             select(Product)

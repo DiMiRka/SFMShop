@@ -62,6 +62,14 @@ class AppSettings(BaseSettings):
     llm_max_tokens: int = 4096
     rate_limit_assistant: str = "10/minute"
 
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+    embedding_batch_size: int = 100
+    embedding_usd_per_million_tokens: float = 0.02
+    embedding_timeout: float = 30.0
+    embedding_max_retries: int = 3
+
     payment_service_url: str | None = None
     payment_service_token: str = ""
     payment_timeout: float = 5.0
