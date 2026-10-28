@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx2
 import openai
@@ -316,3 +317,43 @@ def _recorder():
         index.calls.append(ids)
     index.calls = []
     return index
+
+
+async def test_network_error_raises_unavailable_and_client_closes():
+    def broken(request):
+        raise httpx2.ConnectError("no route")
+
+    client = make_client(broken, max_retries=0)
+
+    with pytest.raises(EmbeddingUnavailableError):
+        await client.embed(["мышь"])
+    await client.close()
+
+
+async def test_embedding_queue_listens_to_product_changes_only_when_indexer_is_set(monkeypatch):
+    from tests.test_event_log import FakeChannel
+    from sfmshop.services import queue_consumer
+
+    channels = []
+
+    async def connect_robust(url):
+        channels.append(FakeChannel())
+        return SimpleNamespace(channel=AsyncMock(return_value=channels[-1]))
+
+    monkeypatch.setattr(queue_consumer.aio_pika, "connect_robust", connect_robust)
+    await QueueConsumer(SimpleNamespace(), "amqp://test", indexer=SimpleNamespace()).start()
+    await QueueConsumer(SimpleNamespace(), "amqp://test").start()
+
+    with_indexer, without_indexer = channels
+    assert with_indexer.queues["embedding_queue"].bindings == [
+        ("product_exchange", "product.created"), ("product_exchange", "product.updated")]
+    assert "embedding_queue.retry" in with_indexer.queues and "embedding_queue.error" in with_indexer.queues
+    assert "embedding_queue" not in without_indexer.queues
+
+
+async def test_embedding_message_is_skipped_without_indexer():
+    message = FakeMessage("product.created", {"product_ids": 5})
+
+    await QueueConsumer(FakeCache(), "amqp://test").process_embedding(message)
+
+    message.ack.assert_not_awaited()

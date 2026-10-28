@@ -12,6 +12,7 @@ from sfmshop.database.models import OrderItem as DbOrderItem
 from sfmshop.database.models import Product as DbProduct
 from sfmshop.database.models import User as DbUser
 from sfmshop.repositories.order_repository import OrderRepository
+from sfmshop.repositories.product_embedding_repository import ProductEmbeddingRepository
 from sfmshop.repositories.product_repository import ProductRepository, SearchResult
 from sfmshop.repositories.user_repository import UserRepository
 from sfmshop.schemas import OrderCreate, OrderItemBase, ProductCreate, ProductUpdate, UserCreate, UserUpdatePatch
@@ -270,3 +271,41 @@ async def test_order_lists_can_be_sorted_newest_first():
 
     await repo.get_user_orders(1, 5)
     assert "ORDER BY orders.id DESC" not in compiled_sql(db.query)[0]
+
+
+class RowsResult:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def tuples(self):
+        return self.rows
+
+
+async def test_semantic_search_orders_by_cosine_distance_with_threshold_and_filters():
+    product = DbProduct(name="Наушники", price=Decimal("4500.00"), quantity=2)
+    db = RepoDb(RowsResult([(product, 0.25)]))
+
+    result = await ProductRepository(db).semantic_search(
+        [0.1, 0.2], max_distance=0.7, max_price=Decimal("5000.00"), in_stock=True, limit=500)
+
+    assert result == [(product, 0.25)]
+    set_scan, query = db.queries
+    assert str(set_scan) == "SET LOCAL hnsw.iterative_scan = strict_order"
+    sql, params = compiled_sql(query)
+    assert "JOIN product_embeddings ON product_embeddings.product_id = products.id" in sql
+    assert sql.count("product_embeddings.embedding <=>") == 3
+    assert "products.price <=" in sql and "products.quantity >" in sql
+    assert 0.7 in params.values() and 100 in params.values()
+
+
+async def test_embedding_upsert_replaces_vector_on_conflict():
+    db = RepoDb(RowsResult([(1, "hash")]))
+    repo = ProductEmbeddingRepository(db)
+
+    assert await repo.get_hashes([1, 2]) == {1: "hash"}
+    await repo.upsert([{"product_id": 1, "embedding": [0.5], "model": "m", "content_hash": "h"}])
+
+    sql, _ = compiled_sql(db.query)
+    assert "ON CONFLICT (product_id) DO UPDATE SET embedding = excluded.embedding" in sql
+    assert "content_hash = excluded.content_hash" in sql and "updated_at = now()" in sql
+

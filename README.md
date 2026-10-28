@@ -29,6 +29,8 @@ REST API интернет-магазина \
   алерты на недоступность сервиса оплаты, 5xx, всплеск отказов и сбои SMTP, правила алертов покрыты тестами `promtool`)
 - единый формат ошибок через доменные исключения и exception handlers
 - ИИ-ассистент магазина на Claude API или OpenAI на выбор (tool calling, structured output, права проверяет сервер, а не модель)
+- семантический поиск товаров и RAG: эмбеддинги OpenAI в PostgreSQL на pgvector (HNSW индекс), индексация в фоне через RabbitMQ,
+  гибридный поиск по смыслу и по названию с объединением через RRF
 - письмо покупателю об оплаченном заказе через SMTP (aiosmtplib) из консьюмера RabbitMQ, без дублей при повторной доставке, локально письма видны в Mailpit
 - отдельный микросервис оплаты `payment_service/` со своей базой (кошельки, журнал операций, идемпотентные оплаты и возвраты)
 
@@ -37,12 +39,13 @@ REST API интернет-магазина \
 | Область        | Технологии                                             |
 |----------------|--------------------------------------------------------|
 | API            | FastAPI, Pydantic v2, Uvicorn                          |
-| База данных    | PostgreSQL 17, SQLAlchemy 2 (async) + asyncpg, Alembic |
+| База данных    | PostgreSQL 17 + pgvector, SQLAlchemy 2 (async) + asyncpg, Alembic |
 | Кэш            | Redis 7                                                |
 | Очередь        | RabbitMQ 3 (aio-pika)                                  |
 | Журнал событий | MongoDB 7 (асинхронный PyMongo)                        |
 | Безопасность   | JWT (python-jose), argon2 (passlib), slowapi           |
 | LLM            | Claude API (SDK `anthropic`) или OpenAI Responses API (SDK `openai`), async |
+| Эмбеддинги     | OpenAI `text-embedding-3-small`, pgvector (HNSW, косинусное расстояние) |
 | Инфраструктура | Docker, Docker Compose, Kubernetes, GitHub Actions     |
 | Качество       | pytest, pytest-cov, ruff, mypy, Codecov                |
 | Мониторинг     | Prometheus (prometheus_client), Grafana, Alertmanager, Sentry |
@@ -65,10 +68,12 @@ flowchart LR
     Models -->|чтение| PGR[(PostgreSQL<br/>replica)]
     Services <-->|кэш| Redis[(Redis)]
     Services -->|ИИ-ассистент| LLM([Claude API])
+    Services -->|вектор запроса| Emb([OpenAI Embeddings])
     Services -->|события| MQ[[RabbitMQ]]
     MQ --> Consumer
     Consumer -->|инвалидация кэша| Redis
     Consumer -->|журнал событий| Mongo[(MongoDB)]
+    Consumer -->|индексация товаров| Emb
     Services -->|оплата, баланс, возврат| Payment["payment-service"]
     Payment --> PayDB[(PostgreSQL<br/>payment_db)]
 ```
@@ -90,7 +95,7 @@ sfmshop/
 ├── database/      # модели SQLAlchemy, сессии primary/replica, клиент MongoDB
 ├── schemas/       # Pydantic схемы запросов и ответов
 ├── core/          # настройки, доменные исключения, безопасность (JWT, хэширование), права доступа, DI, rate limiter, метрики
-└── clients/       # клиенты внешних сервисов (LLM и сервис оплаты с повторами и ключом идемпотентности)
+└── clients/       # клиенты внешних сервисов (LLM, эмбеддинги и сервис оплаты с повторами и ключом идемпотентности)
 ```
 
 ## Быстрый старт (Docker Compose)
@@ -215,6 +220,7 @@ python -m scripts.make_admin admin@example.com
 | Метод  | Путь                      | Описание        |
 |--------|---------------------------|-----------------|
 | GET    | `/v1/products/`           | Список товаров, с `?q=` поиск по названию (от 3 символов, без учёта регистра, с опечатками) |
+| GET    | `/v1/products/semantic-search` | Поиск по смыслу запроса и по названию, `?q=` от 2 символов, фильтры цены и наличия (с rate limit) |
 | GET    | `/v1/products/{id}`       | Товар по id, со средним рейтингом и числом отзывов |
 | POST   | `/v1/products/` 👑        | Создать товар   |
 | PUT    | `/v1/products/{id}` 👑    | Обновить товар  |
@@ -321,6 +327,7 @@ Authorization: Bearer <access_token>
 | Инструмент        | Что делает                                                             |
 |-------------------|------------------------------------------------------------------------|
 | `search_products` | поиск по подстроке в названии, диапазону цены и наличию, до 20 товаров |
+| `semantic_search_products` | поиск по смыслу и по названию (RAG), когда покупатель описывает задачу, до 10 товаров |
 | `get_product`     | товар по id со средним рейтингом и числом отзывов                      |
 | `list_my_orders`  | последние заказы текущего пользователя, новые первыми                  |
 | `get_my_order`    | заказ по id (чужой заказ даст результат «не найден»)                   |
@@ -355,10 +362,54 @@ Authorization: Bearer <access_token>
 Сервис ассистента о провайдере не знает (OpenAI подключён без единой правки в нём) \
 Подробнее решения описаны в [docs/llm_assistant.md](docs/llm_assistant.md)
 
+## Семантический поиск и RAG
+
+Семантический поиск сравнивает смысл: текст товара (название и описание) и запрос превращаются в векторы-эмбеддинги,
+и PostgreSQL с расширением pgvector находит товары с самыми близкими векторами
+
+```http
+GET /v1/products/semantic-search?q=что подарить бегуну&max_price=5000&in_stock=true
+```
+
+```json
+{
+  "query": "что подарить бегуну",
+  "mode": "hybrid",
+  "products": [
+    {"id": 31, "name": "Наушники для бега", "description": "Беспроводные, защита от пота", "price": "4500.00",
+     "quantity": 2, "created_at": "2026-10-28T12:00:00", "similarity": 0.62, "matched_by": ["semantic"]}
+  ]
+}
+```
+
+- **Гибрид** \
+  Результаты поиска по смыслу и по названию (`pg_trgm`) объединяются через RRF: векторы понимают смысл,
+  триграммы точны на названиях, артикулах и опечатках
+- **Индексация в фоне** \
+  После создания или изменения товара событие уходит в RabbitMQ, консьюмер считает эмбеддинг и сохраняет его в `product_embeddings`. \
+  Если текст не менялся, API не вызывается
+- **RAG** \
+  Ассистент получает найденные товары через инструмент `semantic_search_products` и советует только из них
+- **Без ключа** \
+  Если `OPENAI_API_KEY` не задан или API недоступен, поиск работает только по названию (`mode: "text"`)
+
+**Как включить**
+
+1. Задайте `OPENAI_API_KEY` в `.env` (модель `EMBEDDING_MODEL`, по умолчанию `text-embedding-3-small`) \
+   Ключ нужен и при `LLM_PROVIDER=anthropic`: своего API эмбеддингов у Anthropic нет
+2. Образ БД в compose `pgvector/pgvector:0.8.7-pg17` (это PostgreSQL 17 с расширением, старый том подходит)
+3. Посчитайте эмбеддинги для уже существующих товаров:
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app python -m scripts.reindex_products
+```
+
+Решения (почему pgvector, HNSW, отдельная таблица, RRF, порог похожести) описаны в [docs/semantic_search_rag.md](docs/semantic_search_rag.md)
+
 ## Тесты
 
 Тесты работают на моках и `dependency_overrides`, поэтому PostgreSQL, Redis, RabbitMQ и MongoDB для них не нужны \
-Ассистент тестируется на фейковом LLM-клиенте (ключ API и сеть не требуются)
+Ассистент и семантический поиск тестируются на фейковых клиентах LLM и эмбеддингов (ключ API и сеть не требуются)
 
 ```bash
 pytest
@@ -411,6 +462,7 @@ mypy sfmshop/ --ignore-missing-imports
 - [framework_choice.md](docs/framework_choice.md): почему FastAPI, а не Django
 - [database.md](docs/database.md): PostgreSQL, Redis и MongoDB (журнал событий), репликация и шардирование
 - [llm_assistant.md](docs/llm_assistant.md): ИИ-ассистент, tool calling и защита от prompt injection
+- [semantic_search_rag.md](docs/semantic_search_rag.md): семантический поиск на pgvector, гибрид с RRF и RAG в ассистенте
 - [scalable_architecture.md](docs/scalable_architecture.md): масштабирование
 - [message_queue_architecture.md](docs/message_queue_architecture.md): очереди сообщений
 - [microservice_architecture.md](docs/microservice_architecture.md): выделение микросервисов

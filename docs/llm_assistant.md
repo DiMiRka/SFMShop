@@ -1,4 +1,4 @@
-# ИИ-ассистент: решения
+# ИИ-ассистент
 
 Эндпоинт `POST /v1/assistant` отвечает на вопросы о товарах и заказах пользователя \
 Модель Claude вызывает инструменты, сервер их выполняет, ответ клиенту приходит по схеме `AssistantResponse`
@@ -11,6 +11,7 @@ sfmshop/clients/llm/anthropic.py       # реализация на официа�
 sfmshop/clients/llm/openai.py          # реализация на официальном SDK openai, Responses API (AsyncOpenAI)
 sfmshop/clients/llm/__init__.py        # реестр провайдеров, выбор по LLM_PROVIDER
 sfmshop/services/assistant/tools.py    # реестр инструментов: имя → схема аргументов + обработчик
+sfmshop/services/product_search_service.py  # гибридный поиск для инструмента semantic_search_products
 sfmshop/services/assistant/service.py  # AssistantService: цикл tool use, лимиты, сборка ответа
 sfmshop/schemas/assistant.py           # запрос, ответ, схемы аргументов инструментов
 sfmshop/api/v1/assistant.py            # роутер, current_user, rate limit
@@ -119,7 +120,9 @@ sfmshop/api/v1/assistant.py            # роутер, current_user, rate limit
 `ProductRepository.search` фильтрует по `ilike '%…%'`, диапазону `price` и `quantity > 0`\
 Спецсимволы `%` и `_` в запросе экранируются\
 Подстроку ищет GIN-индекс `pg_trgm`, а если точных совпадений нет, поиск переходит на похожесть и находит названия с опечатками,
-подробности и замеры в [database.md](database.md)
+подробности и замеры в [database.md](database.md)\
+Когда покупатель описывает задачу, а не называет товар, модель вызывает `semantic_search_products`:
+поиск по смыслу на pgvector вместе с поиском по названию (RAG), подробности в [semantic_search_rag.md](semantic_search_rag.md)
 
 ## Возможное развитие
 
