@@ -1,7 +1,7 @@
 from pydantic import ConfigDict, Field
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from sfmshop.schemas.base import Base, PatchBase
 
@@ -37,3 +37,14 @@ class ProductResponse(ProductBase):
 class ProductDetailResponse(ProductResponse):
     average_rating: float | None = None
     reviews_count: int = 0
+
+
+class SemanticSearchProduct(ProductResponse):
+    similarity: float | None = Field(None, description="Близость к запросу по смыслу от 0 до 1")
+    matched_by: list[Literal["semantic", "text"]]
+
+
+class SemanticSearchResponse(Base):
+    query: str
+    mode: Literal["hybrid", "text"]
+    products: list[SemanticSearchProduct]

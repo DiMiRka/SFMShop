@@ -1,10 +1,14 @@
+from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status, Response
+from fastapi import APIRouter, Query, Request, status, Response
 
 from sfmshop.core.actor import Actor
+from sfmshop.core.config import app_settings
+from sfmshop.core.limiter import limiter
 from sfmshop.schemas import ProductCreate, ProductUpdate
-from sfmshop.core.dependencies import admin_user, product_write_service, product_read_service
+from sfmshop.schemas.products import SemanticSearchResponse
+from sfmshop.core.dependencies import admin_user, product_write_service, product_read_service, product_search_service
 
 
 products_router = APIRouter(prefix="/products", tags=['products'])
@@ -19,6 +23,19 @@ async def get_products(service: product_read_service, response: Response,
         return await service.search_catalog(q, limit, offset)
 
     return await service.get_all_products(limit, offset)
+
+
+@products_router.get("/semantic-search", summary="Найти товары по смыслу запроса и по названию",
+                     response_model=SemanticSearchResponse, status_code=status.HTTP_200_OK)
+@limiter.limit(app_settings.rate_limit_semantic_search)
+async def semantic_search(request: Request, service: product_search_service,
+                          q: Annotated[str, Query(min_length=2, max_length=200,
+                                                  description="Что ищете, своими словами")],
+                          limit: Annotated[int, Query(ge=1, le=20)] = 10,
+                          min_price: Annotated[Decimal | None, Query(ge=0)] = None,
+                          max_price: Annotated[Decimal | None, Query(ge=0)] = None,
+                          in_stock: bool = False):
+    return await service.hybrid_search(q, limit=limit, min_price=min_price, max_price=max_price, in_stock=in_stock)
 
 
 @products_router.get("/{product_id}", summary="Получить товар", status_code=status.HTTP_200_OK)

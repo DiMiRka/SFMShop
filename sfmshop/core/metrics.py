@@ -71,6 +71,11 @@ PRODUCTS_INDEXED = Counter(
     "Индексация товаров: indexed (вектор посчитан), unchanged (текст не менялся), missing (товар удалён)",
     ["result"],
 )
+SEMANTIC_SEARCHES = Counter(
+    "sfmshop_semantic_searches_total",
+    "Гибридный поиск товаров: hybrid, text (эмбеддинги выключены), fallback (API эмбеддингов недоступен)",
+    ["mode"],
+)
 
 UNMATCHED_ROUTE = "unmatched"
 

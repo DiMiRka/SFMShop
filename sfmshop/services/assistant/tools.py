@@ -7,8 +7,10 @@ from typing import Any
 from sfmshop.clients.llm import ToolSpec
 from sfmshop.core.permissions import order_owner_filter
 from sfmshop.database.models import User
-from sfmshop.schemas.assistant import GetMyOrderArgs, GetProductArgs, ListMyOrdersArgs, SearchProductsArgs, ToolArgs
+from sfmshop.schemas.assistant import (GetMyOrderArgs, GetProductArgs, ListMyOrdersArgs, SearchProductsArgs,
+                                      SemanticSearchProductsArgs, ToolArgs)
 from sfmshop.services.order_service import OrderService
+from sfmshop.services.product_search_service import ProductSearchService
 from sfmshop.services.product_service import ProductService
 
 
@@ -17,6 +19,7 @@ class ToolContext:
     user: User
     products: ProductService
     orders: OrderService
+    search: ProductSearchService
 
 
 @dataclass
@@ -70,6 +73,21 @@ async def search_products(ctx: ToolContext, args: SearchProductsArgs) -> ToolOut
     return ToolOutput(data=products, product_ids={p["id"] for p in products})
 
 
+async def semantic_search_products(ctx: ToolContext, args: SemanticSearchProductsArgs) -> ToolOutput:
+    result = await ctx.search.hybrid_search(
+        args.query,
+        limit=args.limit,
+        min_price=args.min_price,
+        max_price=args.max_price,
+        in_stock=args.in_stock,
+    )
+    products = [
+        {key: product[key] for key in ("id", "name", "description", "price", "quantity", "similarity", "matched_by")}
+        for product in result["products"]
+    ]
+    return ToolOutput(data=products, product_ids={p["id"] for p in products})
+
+
 async def get_product(ctx: ToolContext, args: GetProductArgs) -> ToolOutput:
     product = await ctx.products.get_product_by_id(args.product_id)
     return ToolOutput(data=product, product_ids={product["id"]})
@@ -103,6 +121,14 @@ TOOLS: dict[str, Tool] = {
                         "Цены в рублях, строкой",
             args_model=SearchProductsArgs,
             handler=search_products,
+        ),
+        Tool(
+            name="semantic_search_products",
+            description="Поиск товаров по смыслу запроса и по названию одновременно. Подходит, когда покупатель "
+                        "описывает задачу или назначение («подарок бегуну», «чем почистить экран»), а не называет "
+                        "товар. similarity: близость по смыслу от 0 до 1. Цены в рублях, строкой",
+            args_model=SemanticSearchProductsArgs,
+            handler=semantic_search_products,
         ),
         Tool(
             name="get_product",

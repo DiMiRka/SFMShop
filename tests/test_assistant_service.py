@@ -10,6 +10,7 @@ from sfmshop.services.assistant.service import (INVALID_RESPONSE_ANSWER, REFUSAL
                                             SYSTEM_PROMPT, AssistantService)
 from sfmshop.repositories.product_repository import SearchResult
 from sfmshop.services.order_service import OrderService
+from sfmshop.services.product_search_service import ProductSearchService
 from sfmshop.services.product_service import ProductService
 from tests.test_services import (FakeCache, FakeQueue, OrderRepoFake, ProductRepoFake, UserRepoFake,
                                  db_product)
@@ -55,10 +56,12 @@ def final(answer, product_ids=(), order_ids=()):
     return LLMResult(stop_reason="end_turn", text=text)
 
 
-def make_service(llm, user=USER, product_rep=None, order_rep=None, max_steps=5):
-    products = ProductService(product_rep or SearchRepo(), FakeCache(), FakeQueue())
+def make_service(llm, user=USER, product_rep=None, order_rep=None, max_steps=5, embeddings=None):
+    product_rep = product_rep or SearchRepo()
+    products = ProductService(product_rep, FakeCache(), FakeQueue())
     orders = OrderService(order_rep or OrderRepoFake(), UserRepoFake(), ProductRepoFake(), FakeCache(), FakeQueue())
-    return AssistantService(user, products, orders, llm, max_steps=max_steps)
+    search = ProductSearchService(product_rep, FakeCache(), embeddings, min_similarity=0.3)
+    return AssistantService(user, products, orders, llm, max_steps=max_steps, search=search)
 
 
 def tool_results(llm_call):
@@ -86,7 +89,7 @@ async def test_search_products_tool_calls_repository_with_filters():
     assert first["messages"] == [UserMessage("найди клавиатуры до 5000 в наличии")]
     assert "найди" not in first["system"]
     assert first["schema"] is AssistantResponse
-    assert {tool.name for tool in first["tools"]} == {"search_products", "get_product", "list_my_orders",
+    assert {tool.name for tool in first["tools"]} == {"search_products", "semantic_search_products", "get_product", "list_my_orders",
                                                       "get_my_order"}
 
     second = llm.calls[1]

@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import cast
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Select, select, func
+from sqlalchemy import Select, select, func, text
 
 from sfmshop.repositories.base_repository import BaseRepository
-from sfmshop.database.models import Product, Review
+from sfmshop.database.models import Product, ProductEmbedding, Review
 
 SEARCH_LIMIT_MAX = 100
 FUZZY_MIN_LENGTH = 3
@@ -38,13 +38,7 @@ class ProductRepository(BaseRepository):
             in_stock: bool = False,
             limit: int = 10,
             offset: int = 0) -> SearchResult:
-        query = select(Product)
-        if min_price is not None:
-            query = query.where(Product.price >= min_price)
-        if max_price is not None:
-            query = query.where(Product.price <= max_price)
-        if in_stock:
-            query = query.where(Product.quantity > 0)
+        query = self._filtered(select(Product), min_price, max_price, in_stock)
 
         limit = max(1, min(limit, SEARCH_LIMIT_MAX))
         if not name_query:
@@ -59,6 +53,36 @@ class ProductRepository(BaseRepository):
         similar = query.where(Product.name.op("%>")(name_query))
         order = (func.word_similarity(name_query, Product.name).desc(), Product.price, Product.id)
         return await self._page(similar, order, limit, offset, fuzzy=True)
+
+    async def semantic_search(
+            self,
+            vector: list[float],
+            max_distance: float,
+            min_price: Decimal | None = None,
+            max_price: Decimal | None = None,
+            in_stock: bool = False,
+            limit: int = 10) -> list[tuple[Product, float]]:
+        distance = ProductEmbedding.embedding.cosine_distance(vector)
+        query = self._filtered(
+            select(Product, distance.label("distance")).join(ProductEmbedding, ProductEmbedding.product_id == Product.id),
+            min_price, max_price, in_stock,
+        )
+
+        await self.db.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
+        result = await self.db.execute(
+            query.where(distance <= max_distance).order_by(distance).limit(max(1, min(limit, SEARCH_LIMIT_MAX)))
+        )
+        return [(product, float(product_distance)) for product, product_distance in result.tuples()]
+
+    @staticmethod
+    def _filtered(query: Select, min_price: Decimal | None, max_price: Decimal | None, in_stock: bool) -> Select:
+        if min_price is not None:
+            query = query.where(Product.price >= min_price)
+        if max_price is not None:
+            query = query.where(Product.price <= max_price)
+        if in_stock:
+            query = query.where(Product.quantity > 0)
+        return query
 
     async def _page(self, query: Select, order: tuple, limit: int, offset: int, fuzzy: bool) -> SearchResult:
         total = await self.db.scalar(select(func.count()).select_from(query.subquery()))

@@ -14,11 +14,13 @@ from sfmshop.schemas import TokenData
 from sfmshop.repositories import ProductRepository, OrderRepository, UserRepository, ReviewRepository
 from sfmshop.services import ProductService, UserService, OrderService
 from sfmshop.core.config import app_settings
+from sfmshop.clients.embeddings import EmbeddingClient
 from sfmshop.clients.llm import LLMClient
 from sfmshop.clients.payment_client import PaymentClient
 from sfmshop.core.exceptions import LLMUnavailableError
 from sfmshop.services.assistant import AssistantService
 from sfmshop.services.health_service import HealthService
+from sfmshop.services.product_search_service import ProductSearchService
 from sfmshop.services.event_log_service import EventLogService
 from sfmshop.services.review_service import ReviewService
 from sfmshop.services.wallet_service import WalletService
@@ -47,6 +49,13 @@ def get_llm_client(request: Request) -> LLMClient:
 
 
 llm_client_dependency = Annotated[LLMClient, Depends(get_llm_client)]
+
+
+def get_embedding_client(request: Request) -> EmbeddingClient | None:
+    return getattr(request.app.state, "embedding_client", None)
+
+
+embedding_client_dependency = Annotated[EmbeddingClient | None, Depends(get_embedding_client)]
 
 
 def get_payment_client(request: Request) -> PaymentClient | None:
@@ -189,6 +198,17 @@ product_write_service = Annotated[ProductService, Depends(get_product_write_serv
 product_read_service = Annotated[ProductService, Depends(get_product_read_service)]
 
 
+async def get_product_search_service(
+        rep: p_rep_read_dependency,
+        cache: cache_dependency,
+        embeddings: embedding_client_dependency) -> ProductSearchService:
+    return ProductSearchService(rep, cache, embeddings, min_similarity=app_settings.semantic_min_similarity,
+                                query_cache_ttl=app_settings.embedding_query_cache_ttl)
+
+
+product_search_service = Annotated[ProductSearchService, Depends(get_product_search_service)]
+
+
 async def get_user_write_service(
         u_rep: u_rep_write_dependency,
         o_rep: o_rep_write_dependency,
@@ -270,9 +290,10 @@ async def get_assistant_service(
         cu: current_user,
         llm: llm_client_dependency,
         products: product_read_service,
-        orders: order_read_service
+        orders: order_read_service,
+        search: product_search_service
 ) -> AssistantService:
-    return AssistantService(cu, products, orders, llm, max_steps=app_settings.llm_max_tool_steps)
+    return AssistantService(cu, products, orders, llm, max_steps=app_settings.llm_max_tool_steps, search=search)
 
 
 assistant_service = Annotated[AssistantService, Depends(get_assistant_service)]

@@ -53,6 +53,7 @@ def login():
     app.dependency_overrides[dependencies.get_current_user] = user
     app.dependency_overrides[dependencies.get_product_read_service] = service
     app.dependency_overrides[dependencies.get_order_read_service] = service
+    app.dependency_overrides[dependencies.get_product_search_service] = service
 
 
 def test_assistant_requires_token():

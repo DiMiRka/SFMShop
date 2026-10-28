@@ -69,6 +69,9 @@ class AppSettings(BaseSettings):
     embedding_usd_per_million_tokens: float = 0.02
     embedding_timeout: float = 30.0
     embedding_max_retries: int = 3
+    embedding_query_cache_ttl: int = 86400
+    semantic_min_similarity: float = 0.3
+    rate_limit_semantic_search: str = "30/minute"
 
     payment_service_url: str | None = None
     payment_service_token: str = ""

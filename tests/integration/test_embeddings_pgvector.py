@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sfmshop.core.config import app_settings
 from sfmshop.database.connection import create_sessionmaker
 from sfmshop.database.models import EMBEDDING_DIMENSIONS, Product, ProductEmbedding
+from sfmshop.repositories.product_repository import ProductRepository
 from sfmshop.services.product_index_service import ProductIndexer
 from tests.test_embeddings import FakeEmbeddingClient, fake_vector
 
@@ -60,3 +61,52 @@ def test_indexer_stores_vectors_in_pgvector_and_cascade_removes_them():
     assert stored.embedding == pytest.approx(vector, abs=1e-6)
     assert nearest == product_id
     assert left is None
+
+
+def axis(*indexes):
+    vector = [0.0] * EMBEDDING_DIMENSIONS
+    for index in indexes:
+        vector[index] = 1.0
+    return vector
+
+
+def test_semantic_search_applies_similarity_threshold_and_filters():
+    async def scenario():
+        engine = create_async_engine(app_settings.postgres_url)
+        session_factory = create_sessionmaker(engine)
+        marker = uuid.uuid4().hex[:8]
+        rows = [
+            (f"Близкий {marker}", 5, axis(0)),
+            (f"Похожий без остатка {marker}", 0, axis(0, 1)),
+            (f"Далёкий {marker}", 5, axis(2)),
+        ]
+        try:
+            async with session_factory() as session:
+                products = [Product(name=name, price=Decimal("100.00"), quantity=quantity) for name, quantity, _ in rows]
+                session.add_all(products)
+                await session.flush()
+                session.add_all(
+                    ProductEmbedding(product_id=product.id, embedding=vector, model="test", content_hash=marker)
+                    for product, (_, _, vector) in zip(products, rows)
+                )
+                await session.commit()
+                ids = [product.id for product in products]
+
+            async with session_factory() as session:
+                found = await ProductRepository(session).semantic_search(axis(0), max_distance=0.5, limit=100)
+            async with session_factory() as session:
+                in_stock = await ProductRepository(session).semantic_search(axis(0), 0.5, in_stock=True, limit=100)
+
+            async with session_factory() as session:
+                await session.execute(delete(Product).where(Product.id.in_(ids)))
+                await session.commit()
+            return ids, found, in_stock
+        finally:
+            await engine.dispose()
+
+    (close, similar, far), found, in_stock = asyncio.run(scenario())
+
+    ours = [(product.id, round(distance, 3)) for product, distance in found if product.id in (close, similar, far)]
+    assert ours == [(close, 0.0), (similar, 0.293)]
+    assert [product.id for product, _ in in_stock if product.id in (close, similar, far)] == [close]
+
