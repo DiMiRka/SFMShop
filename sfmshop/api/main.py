@@ -1,4 +1,6 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
+from datetime import timedelta
 from typing import Any, cast
 from fastapi import FastAPI, Request
 import redis
@@ -14,7 +16,8 @@ from sfmshop.clients.embeddings import create_embedding_client
 from sfmshop.clients.llm import create_llm_client
 from sfmshop.clients.email_client import create_email_client
 from sfmshop.clients.payment_client import create_payment_client
-from sfmshop.database.connection import async_session, create_mongo_client
+from sfmshop.clients.marketplaces import create_marketplace_clients
+from sfmshop.database.connection import async_session, create_mongo_client, engine
 from sfmshop.repositories.event_repository import EventRepository
 from sfmshop.core.config import app_settings, uvicorn_options
 from sfmshop.core.metrics import HTTP_DURATION, HTTP_REQUESTS, route_label, start_metrics_server
@@ -25,6 +28,8 @@ from sfmshop.services.queue_producer import QueueProducer
 from sfmshop.services.queue_consumer import QueueConsumer
 from sfmshop.services.notification_service import OrderNotifier
 from sfmshop.services.product_index_service import ProductIndexer
+from sfmshop.services.marketplace_scheduler import MarketplaceSyncRunner, advisory_lock
+from sfmshop.services.marketplace_sync_service import MarketplaceSyncService
 from sfmshop.api.exceptions import (validation_notfound_handler, validation_exception_handler,
                                 business_exception_handler, unauthorized_handler, forbidden_handler,
                                 service_unavailable_handler, base_exception_handler)
@@ -77,7 +82,30 @@ async def lifespan(app: FastAPI):
 
     app.state.consumer = consumer
 
+    app.state.marketplace_clients = create_marketplace_clients(app_settings)
+    app.state.marketplace_sync = None
+    marketplace_task = None
+    if app.state.marketplace_clients:
+        sync_service = MarketplaceSyncService(
+            async_session,
+            app.state.marketplace_clients,
+            app.state.queue,
+            orders_lookback=timedelta(hours=app_settings.marketplace_orders_lookback_hours),
+            orders_overlap=timedelta(minutes=app_settings.marketplace_orders_overlap_minutes),
+        )
+        app.state.marketplace_sync = MarketplaceSyncRunner(
+            sync_service, lambda: advisory_lock(engine), app_settings.marketplace_sync_interval)
+        if app_settings.marketplace_sync_interval > 0:
+            marketplace_task = asyncio.create_task(app.state.marketplace_sync.run_forever())
+
     yield
+
+    if marketplace_task is not None:
+        marketplace_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await marketplace_task
+    for marketplace_client in app.state.marketplace_clients.values():
+        await marketplace_client.close()
 
     await app.state.consumer.close()
 

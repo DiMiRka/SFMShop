@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import cast
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Select, select, func, text
+from sqlalchemy import Select, select, func, text, update
 
 from sfmshop.repositories.base_repository import BaseRepository
 from sfmshop.database.models import Product, ProductEmbedding, Review
@@ -112,6 +112,14 @@ class ProductRepository(BaseRepository):
             .with_for_update()
         )
         return list(result.scalars().all())
+
+    async def subtract_quantities(self, quantities: dict[int, int]) -> None:
+        for product_id in sorted(quantities):
+            await self.db.execute(
+                update(Product)
+                .where(Product.id == product_id)
+                .values(quantity=func.greatest(Product.quantity - quantities[product_id], 0))
+            )
 
     async def create(self, data: dict) -> int:
         product_db = Product(**data)

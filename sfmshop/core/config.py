@@ -90,6 +90,9 @@ class AppSettings(BaseSettings):
     marketplace_timeout: float = 30.0
     marketplace_connect_timeout: float = 5.0
     marketplace_max_retries: int = 3
+    marketplace_sync_interval: float = 300.0
+    marketplace_orders_lookback_hours: int = 24
+    marketplace_orders_overlap_minutes: int = 60
     ozon_client_id: str | None = None
     ozon_api_key: str | None = None
     ozon_base_url: str = "https://api-seller.ozon.ru"

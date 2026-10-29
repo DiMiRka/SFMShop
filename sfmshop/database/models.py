@@ -4,6 +4,7 @@ from typing import List
 
 from sqlalchemy import (BigInteger, CheckConstraint, DECIMAL, DateTime, ForeignKey, Index, Integer, String, Text,
                         UniqueConstraint, false, func)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, relationship, mapped_column, Mapped
 from pgvector.sqlalchemy import VECTOR
 
@@ -84,6 +85,23 @@ class MarketplaceListing(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class ImportedOrder(Base):
+    __tablename__ = 'marketplace_orders'
+    __table_args__ = (
+        UniqueConstraint("marketplace", "external_id", name="uq_marketplace_orders_external"),
+        Index("ix_marketplace_orders_ordered_at", "marketplace", "ordered_at"),
+    )
+
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+    marketplace: Mapped[str] = mapped_column(String(20), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    total: Mapped[Decimal] = mapped_column(DECIMAL(12, 2), nullable=False)
+    items: Mapped[list[dict]] = mapped_column(JSONB, nullable=False)
+    ordered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
 class Order(Base):

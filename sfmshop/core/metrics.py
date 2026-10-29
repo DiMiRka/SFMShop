@@ -97,6 +97,11 @@ MARKETPLACE_ITEMS = Counter(
     "Позиции, отправленные на маркетплейс: stock или price, updated или failed",
     ["marketplace", "kind", "result"],
 )
+MARKETPLACE_ORDERS = Counter(
+    "sfmshop_marketplace_orders_total",
+    "Заказы с маркетплейсов: imported (новый), duplicate (уже был импортирован)",
+    ["marketplace", "result"],
+)
 
 UNMATCHED_ROUTE = "unmatched"
 

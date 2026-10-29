@@ -42,6 +42,32 @@ class MarketplaceListingRepository:
         )
         return [ListingState(**row._mapping) for row in result]
 
+    async def get_product_ids(self, marketplace: str, offer_ids: list[str]) -> dict[str, int]:
+        result = await self.db.execute(
+            select(MarketplaceListing.offer_id, MarketplaceListing.product_id)
+            .where(MarketplaceListing.marketplace == marketplace, MarketplaceListing.offer_id.in_(offer_ids))
+        )
+        return {offer_id: product_id for offer_id, product_id in result.tuples()}
+
+    async def get_all(self, marketplace: str | None = None) -> list[MarketplaceListing]:
+        query = select(MarketplaceListing).order_by(MarketplaceListing.id)
+        if marketplace is not None:
+            query = query.where(MarketplaceListing.marketplace == marketplace)
+        return list((await self.db.scalars(query)).all())
+
+    async def get_by_id(self, listing_id: int) -> MarketplaceListing | None:
+        return await self.db.get(MarketplaceListing, listing_id)
+
+    async def create(self, data: dict[str, Any]) -> MarketplaceListing:
+        listing = MarketplaceListing(**data)
+        self.db.add(listing)
+        await self.db.flush()
+        await self.db.refresh(listing)
+        return listing
+
+    async def delete(self, listing: MarketplaceListing) -> None:
+        await self.db.delete(listing)
+
     async def save_results(self, rows: list[dict[str, Any]]) -> None:
         if rows:
             await self.db.execute(update(MarketplaceListing), rows)

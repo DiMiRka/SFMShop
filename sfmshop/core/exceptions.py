@@ -56,3 +56,7 @@ class MarketplaceUnavailableError(ServiceUnavailableError):
 
 class MarketplaceRequestError(SFMShopException):
     pass
+
+
+class MarketplaceSyncBusyError(BusinessLogicError):
+    pass

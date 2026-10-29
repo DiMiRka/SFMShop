@@ -17,13 +17,16 @@ from sfmshop.core.config import app_settings
 from sfmshop.clients.embeddings import EmbeddingClient
 from sfmshop.clients.llm import LLMClient
 from sfmshop.clients.payment_client import PaymentClient
-from sfmshop.core.exceptions import LLMUnavailableError
+from sfmshop.core.exceptions import LLMUnavailableError, ServiceUnavailableError
 from sfmshop.services.assistant import AssistantService
 from sfmshop.services.health_service import HealthService
 from sfmshop.services.product_search_service import ProductSearchService
 from sfmshop.services.event_log_service import EventLogService
 from sfmshop.services.review_service import ReviewService
 from sfmshop.services.wallet_service import WalletService
+from sfmshop.repositories.marketplace_listing_repository import MarketplaceListingRepository
+from sfmshop.services.marketplace_listing_service import MarketplaceListingService
+from sfmshop.services.marketplace_scheduler import MarketplaceSyncRunner
 from sfmshop.database.connection import engine, engine_replica
 
 
@@ -297,3 +300,33 @@ async def get_assistant_service(
 
 
 assistant_service = Annotated[AssistantService, Depends(get_assistant_service)]
+
+
+def get_marketplace_sync_runner(request: Request) -> MarketplaceSyncRunner:
+    runner = getattr(request.app.state, "marketplace_sync", None)
+    if runner is None:
+        raise ServiceUnavailableError("Интеграция с маркетплейсами не настроена")
+    return runner
+
+
+marketplace_sync_runner = Annotated[MarketplaceSyncRunner, Depends(get_marketplace_sync_runner)]
+
+
+async def get_marketplace_listing_write_service(
+        db: write_db_dependency,
+        p_rep: p_rep_write_dependency
+) -> MarketplaceListingService:
+    return MarketplaceListingService(MarketplaceListingRepository(db), p_rep)
+
+
+async def get_marketplace_listing_read_service(
+        db: read_db_dependency,
+        p_rep: p_rep_read_dependency
+) -> MarketplaceListingService:
+    return MarketplaceListingService(MarketplaceListingRepository(db), p_rep)
+
+
+marketplace_listing_write_service = Annotated[MarketplaceListingService,
+                                              Depends(get_marketplace_listing_write_service)]
+marketplace_listing_read_service = Annotated[MarketplaceListingService,
+                                             Depends(get_marketplace_listing_read_service)]
