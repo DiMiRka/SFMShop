@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any
+from collections.abc import Iterator, Sequence
+from typing import Any, TypeVar
 
 import httpx
 
@@ -9,6 +10,13 @@ from sfmshop.services.log_service import log_service
 
 
 RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+T = TypeVar("T")
+
+
+def batched(items: Sequence[T], size: int) -> Iterator[Sequence[T]]:
+    for start in range(0, len(items), size):
+        yield items[start:start + size]
 
 
 class Throttle:

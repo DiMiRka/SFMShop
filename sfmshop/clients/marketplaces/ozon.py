@@ -1,11 +1,10 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from itertools import batched
 from typing import Any
 
 from sfmshop.clients.marketplaces.base import (Marketplace, MarketplaceOrder, MarketplaceOrderItem, PriceUpdate,
                                                StockUpdate, UpdateResult)
-from sfmshop.clients.marketplaces.http import MarketplaceHttp, Throttle
+from sfmshop.clients.marketplaces.http import MarketplaceHttp, Throttle, batched
 
 
 STOCKS_PATH = "/v2/products/stocks"
