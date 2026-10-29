@@ -33,6 +33,8 @@ REST API интернет-магазина \
   гибридный поиск по смыслу и по названию с объединением через RRF
 - письмо покупателю об оплаченном заказе через SMTP (aiosmtplib) из консьюмера RabbitMQ, без дублей при повторной доставке, локально письма видны в Mailpit
 - отдельный микросервис оплаты `payment_service/` со своей базой (кошельки, журнал операций, идемпотентные оплаты и возвраты)
+- интеграция с Ozon Seller API и Wildberries API по документации (выгрузка остатков и цен, идемпотентный импорт заказов,
+  батчи и лимиты площадок, синхронизация по расписанию с advisory lock)
 
 ## Стек
 
@@ -292,6 +294,15 @@ pending, failed ──отмена──→ cancelled
 |-------|-------------------|--------------------------------------------------------------------------------------------------------------------|
 | GET   | `/v1/events/` 👑  | События из MongoDB (новые первыми), фильтры `event`, `user_id`, `order_id`, `product_id`, `actor_id`, пагинация через `before` |
 
+**Маркетплейсы**
+
+| Метод  | Путь                                  | Описание                                                                                          |
+|--------|---------------------------------------|---------------------------------------------------------------------------------------------------|
+| POST   | `/v1/marketplaces/sync` 👑            | Импортировать заказы и выгрузить остатки и цены сейчас, `?force=true` отправляет всё (409 если синхронизация уже идёт) |
+| GET    | `/v1/marketplaces/listings` 👑        | Привязки товаров к площадкам со статусом последней синхронизации, фильтр `marketplace`            |
+| POST   | `/v1/marketplaces/listings` 👑        | Привязать товар к площадке                                                                        |
+| DELETE | `/v1/marketplaces/listings/{id}` 👑   | Удалить привязку                                                                                  |
+
 **Служебные** (без префикса `/v1` и без токена)
 
 | Метод | Путь            | Описание                                                                                      |
@@ -406,6 +417,31 @@ docker compose -f deploy/docker/docker-compose.yml --env-file .env exec app pyth
 
 Решения (почему pgvector, HNSW, отдельная таблица, RRF, порог похожести) описаны в [docs/semantic_search_rag.md](docs/semantic_search_rag.md)
 
+## Маркетплейсы
+
+Магазин выгружает остатки и цены на Ozon и Wildberries и забирает оттуда новые заказы \
+Интеграция написана по официальной документации Ozon Seller API и WB API
+
+- **Остатки и цены** \
+  На площадку уходят только изменившиеся значения, пачками по лимитам площадки, с повторами на 429 и 5xx \
+  Ошибки по отдельным товарам разбираются из тела ответа и видны в `last_error` привязки
+- **Заказы** \
+  Импорт идемпотентный: повторно полученный заказ не создаёт дубль и не списывает остаток второй раз
+  (`INSERT ... ON CONFLICT DO NOTHING RETURNING`)
+- **Расписание** \
+  Цикл в lifespan раз в `MARKETPLACE_SYNC_INTERVAL` секунд, `pg_try_advisory_lock` пускает синхронизацию только в один воркер uvicorn
+- **Новая площадка** \
+  Добавляется реализацией `MarketplaceClient` и строкой в реестре, сервис синхронизации не меняется
+
+**Как включить**
+
+1. Задайте в `.env` ключи площадки: `OZON_CLIENT_ID`, `OZON_API_KEY` и `OZON_WAREHOUSE_ID` или `WB_API_TOKEN` и `WB_WAREHOUSE_ID` \
+   Без ключей площадка выключена, приложение стартует как обычно
+2. Примените миграции и привяжите товары: `POST /v1/marketplaces/listings` (для WB нужны `nmID` и `chrtId` размера)
+3. Синхронизация пойдёт по расписанию, запустить сразу можно через `POST /v1/marketplaces/sync`
+
+Решения (Protocol и реестр, батчи и лимиты, идемпотентный импорт, advisory lock) описаны в [docs/marketplaces.md](docs/marketplaces.md)
+
 ## Тесты
 
 Тесты работают на моках и `dependency_overrides`, поэтому PostgreSQL, Redis, RabbitMQ и MongoDB для них не нужны \
@@ -463,6 +499,7 @@ mypy sfmshop/ --ignore-missing-imports
 - [database.md](docs/database.md): PostgreSQL, Redis и MongoDB (журнал событий), репликация и шардирование
 - [llm_assistant.md](docs/llm_assistant.md): ИИ-ассистент, tool calling и защита от prompt injection
 - [semantic_search_rag.md](docs/semantic_search_rag.md): семантический поиск на pgvector, гибрид с RRF и RAG в ассистенте
+- [marketplaces.md](docs/marketplaces.md): интеграция с Ozon и Wildberries, батчи и лимиты, идемпотентный импорт заказов
 - [scalable_architecture.md](docs/scalable_architecture.md): масштабирование
 - [message_queue_architecture.md](docs/message_queue_architecture.md): очереди сообщений
 - [microservice_architecture.md](docs/microservice_architecture.md): выделение микросервисов
