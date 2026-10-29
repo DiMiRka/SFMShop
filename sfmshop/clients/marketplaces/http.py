@@ -47,7 +47,8 @@ class MarketplaceHttp:
             url: str,
             json: Any = None,
             params: dict[str, Any] | None = None,
-            throttle: Throttle | None = None) -> httpx.Response:
+            throttle: Throttle | None = None,
+            allowed_statuses: frozenset[int] = frozenset()) -> httpx.Response:
         reason = ""
 
         for attempt in range(self.max_retries + 1):
@@ -60,7 +61,7 @@ class MarketplaceHttp:
             except httpx.TransportError as exc:
                 reason = type(exc).__name__
             else:
-                if response.is_success:
+                if response.is_success or response.status_code in allowed_statuses:
                     MARKETPLACE_REQUESTS.labels(self.marketplace, "ok").inc()
                     return response
                 if response.status_code not in RETRYABLE_STATUSES:

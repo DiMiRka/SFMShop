@@ -94,6 +94,10 @@ class AppSettings(BaseSettings):
     ozon_api_key: str | None = None
     ozon_base_url: str = "https://api-seller.ozon.ru"
     ozon_warehouse_id: int | None = None
+    wb_api_token: str | None = None
+    wb_prices_base_url: str = "https://discounts-prices-api.wildberries.ru"
+    wb_marketplace_base_url: str = "https://marketplace-api.wildberries.ru"
+    wb_warehouse_id: int | None = None
 
     @property
     def postgres_url(self) -> str:
