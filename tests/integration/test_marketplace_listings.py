@@ -14,6 +14,7 @@ from sfmshop.database.models import MarketplaceListing, Product
 from sfmshop.repositories.marketplace_listing_repository import MarketplaceListingRepository
 from sfmshop.services.marketplace_sync_service import MarketplaceSyncService
 from tests.test_marketplace_sync import FakeMarketplace
+from tests.test_services import FakeQueue
 
 
 pytestmark = pytest.mark.skipif(
@@ -37,13 +38,14 @@ def test_push_saves_synced_values_and_listings_follow_product_lifecycle():
                 product_id = product.id
 
             client = FakeMarketplace()
-            service = MarketplaceSyncService(session_factory, {marketplace: client})
+            service = MarketplaceSyncService(session_factory, {marketplace: client}, FakeQueue())
             first = await service.push_stocks_and_prices()
             second = await service.push_stocks_and_prices()
 
             async with session_factory() as session:
                 listing = await session.scalar(
                     select(MarketplaceListing).where(MarketplaceListing.marketplace == marketplace))
+                synced = (listing.synced_quantity, listing.synced_price, listing.last_synced_at, listing.last_error)
                 session.add(MarketplaceListing(product_id=product_id, marketplace=marketplace, offer_id="KETTLE-1"))
                 try:
                     await session.commit()
@@ -62,21 +64,22 @@ def test_push_saves_synced_values_and_listings_follow_product_lifecycle():
                 left = await session.scalar(
                     select(MarketplaceListing.id).where(MarketplaceListing.marketplace == marketplace))
 
-            return first, second, client, listing, duplicate_rejected, with_error, left
+            return first, second, client, synced, duplicate_rejected, with_error, left
         finally:
             await engine.dispose()
 
-    first, second, client, listing, duplicate_rejected, with_error, left = asyncio.run(scenario())
+    first, second, client, synced, duplicate_rejected, with_error, left = asyncio.run(scenario())
 
     [first_result] = first.values()
     [second_result] = second.values()
     assert (first_result.stocks_updated, first_result.prices_updated) == (1, 1)
     assert (second_result.stocks_updated, second_result.prices_updated) == (0, 0)
     assert len(client.stock_calls) == 1
-    assert listing.synced_quantity == 4
-    assert listing.synced_price == Decimal("1490.00")
-    assert listing.last_synced_at is not None
-    assert listing.last_error is None
+    synced_quantity, synced_price, last_synced_at, last_error = synced
+    assert synced_quantity == 4
+    assert synced_price == Decimal("1490.00")
+    assert last_synced_at is not None
+    assert last_error is None
     assert duplicate_rejected
     assert with_error == "ozon недоступен"
     assert left is None

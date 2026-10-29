@@ -30,8 +30,8 @@ def metric(name, **labels):
 
 
 def fake_vector(text, dimensions=8):
-    digest = hashlib.sha256(text.encode()).digest()
-    return [round(byte / 255, 4) for byte in digest[:dimensions]]
+    digest = hashlib.shake_256(text.encode()).digest(dimensions)
+    return [round(byte / 255, 4) for byte in digest]
 
 
 class FakeEmbeddingClient:
