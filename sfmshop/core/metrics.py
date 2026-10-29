@@ -81,6 +81,22 @@ MARKETPLACE_REQUESTS = Counter(
     "Запросы к API маркетплейсов: ok, error (ошибка запроса 4xx), unavailable (после всех повторов)",
     ["marketplace", "result"],
 )
+MARKETPLACE_SYNC_RUNS = Counter(
+    "sfmshop_marketplace_sync_runs_total",
+    "Запуски синхронизации с маркетплейсами: ok, partial (часть позиций с ошибкой), error (площадка недоступна)",
+    ["marketplace", "operation", "result"],
+)
+MARKETPLACE_SYNC_DURATION = Histogram(
+    "sfmshop_marketplace_sync_duration_seconds",
+    "Длительность синхронизации с маркетплейсом",
+    ["marketplace", "operation"],
+    buckets=(0.5, 1, 2.5, 5, 10, 30, 60, 120, 300),
+)
+MARKETPLACE_ITEMS = Counter(
+    "sfmshop_marketplace_items_total",
+    "Позиции, отправленные на маркетплейс: stock или price, updated или failed",
+    ["marketplace", "kind", "result"],
+)
 
 UNMATCHED_ROUTE = "unmatched"
 

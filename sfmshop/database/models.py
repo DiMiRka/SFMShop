@@ -2,7 +2,8 @@ from decimal import Decimal
 from datetime import datetime
 from typing import List
 
-from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, DECIMAL, Index, Text, UniqueConstraint, false, func
+from sqlalchemy import (BigInteger, CheckConstraint, DECIMAL, DateTime, ForeignKey, Index, Integer, String, Text,
+                        UniqueConstraint, false, func)
 from sqlalchemy.orm import DeclarativeBase, relationship, mapped_column, Mapped
 from pgvector.sqlalchemy import VECTOR
 
@@ -62,6 +63,27 @@ class ProductEmbedding(Base):
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+
+class MarketplaceListing(Base):
+    __tablename__ = 'marketplace_listings'
+    __table_args__ = (
+        UniqueConstraint("marketplace", "offer_id", name="uq_marketplace_listings_offer"),
+        UniqueConstraint("marketplace", "product_id", name="uq_marketplace_listings_product"),
+    )
+
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey('products.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, index=True)
+    marketplace: Mapped[str] = mapped_column(String(20), nullable=False)
+    offer_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    external_product_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    external_size_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    synced_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    synced_price: Mapped[Decimal | None] = mapped_column(DECIMAL(10, 2), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
 class Order(Base):
