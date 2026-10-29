@@ -87,6 +87,14 @@ class AppSettings(BaseSettings):
     smtp_timeout: float = 10.0
     smtp_from: str = "SFMShop <noreply@sfmshop.local>"
 
+    marketplace_timeout: float = 30.0
+    marketplace_connect_timeout: float = 5.0
+    marketplace_max_retries: int = 3
+    ozon_client_id: str | None = None
+    ozon_api_key: str | None = None
+    ozon_base_url: str = "https://api-seller.ozon.ru"
+    ozon_warehouse_id: int | None = None
+
     @property
     def postgres_url(self) -> str:
         return (f"postgresql+asyncpg://{self.db_user}:{self.db_password}@"

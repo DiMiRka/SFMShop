@@ -76,6 +76,11 @@ SEMANTIC_SEARCHES = Counter(
     "Гибридный поиск товаров: hybrid, text (эмбеддинги выключены), fallback (API эмбеддингов недоступен)",
     ["mode"],
 )
+MARKETPLACE_REQUESTS = Counter(
+    "sfmshop_marketplace_requests_total",
+    "Запросы к API маркетплейсов: ok, error (ошибка запроса 4xx), unavailable (после всех повторов)",
+    ["marketplace", "result"],
+)
 
 UNMATCHED_ROUTE = "unmatched"
 

@@ -48,3 +48,11 @@ class PaymentUnavailableError(ServiceUnavailableError):
 
 class EmbeddingUnavailableError(ServiceUnavailableError):
     pass
+
+
+class MarketplaceUnavailableError(ServiceUnavailableError):
+    pass
+
+
+class MarketplaceRequestError(SFMShopException):
+    pass
